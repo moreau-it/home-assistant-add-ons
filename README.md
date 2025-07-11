@@ -1,1 +1,1 @@
-# home-assistant-opencpn
+# home-assistant-add-ons
