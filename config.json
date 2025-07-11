@@ -1,1 +1,18 @@
-
+name: "OpenCPN"
+version: "5.11.3-beta3"
+slug: "opencpn"
+description: "Marine navigation app OpenCPN running as a Home Assistant add-on"
+url: "https://github.com/OpenCPN/OpenCPN"
+arch:
+  - amd64
+  - aarch64
+startup: services
+boot: auto
+init: false
+panel_icon: mdi:radar
+panel_title: "OpenCPN"
+panel_admin: false
+webui: "http://172.0.0.1:6080"
+ports:
+  6080/tcp: 6080
+schema: {}
