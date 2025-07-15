@@ -1,15 +1,22 @@
+# https://developers.moreau.it/docs/add-ons/configuration#add-on-config
 name: "OpenCPN"
 version: "5.11.3-beta3"
 slug: "opencpn"
 description: "Marine navigation app OpenCPN running as a Home Assistant add-on"
 url: "https://github.com/moreau-it/home-assistant-add-ons/tree/main/opencpn"
 arch:
-  - amd64
+  - armhf
+  - armv7
   - aarch64
+  - amd64
+  - i386
 startup: services
 boot: auto
 init: false
 webui: "http://[HOST]:6080"
 ports:
   6080/tcp: 6080
-schema: {}
+map:
+  - share:rw
+options:
+  message: "OpenCPN"
