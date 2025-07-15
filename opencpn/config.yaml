@@ -13,7 +13,7 @@ arch:
 startup: services
 boot: auto
 init: false
-webui: "http://[HOST]:6080"
+webui: "[PROTO:tcp]://[HOST]:[PORT:6080]/"
 ports:
   6080/tcp: 6080
 map:
