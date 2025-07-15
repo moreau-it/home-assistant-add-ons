@@ -1,0 +1,19 @@
+{
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true
+  },
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/*/**": true
+  },
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": true
+  },
+  "yaml.schemas": {
+    "https://json.schemastore.org/github-workflow.json": "/*.github/workflows/*",
+    "https://json.schemastore.org/prettierrc.json": "/.prettierrc"
+  }
+}
