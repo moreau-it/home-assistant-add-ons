@@ -1,4 +1,4 @@
-# More Development Home Assistant add-on repository
+# Moreau Development Home Assistant add-on repository
 
 This repository contains plugins developet by Moreau Develepent
 
