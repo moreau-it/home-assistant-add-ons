@@ -1,4 +1,4 @@
 # https://developers.home-assistant.io/docs/add-ons/repository#repository-configuration
 name: Moreau Development Home Assistant add-on repository
 url: 'https://github.com/moreau-it/home-assistant-add-ons'
-maintainer: Moreau Development <developer@moreau.it>
+maintainer: Moreau Development
