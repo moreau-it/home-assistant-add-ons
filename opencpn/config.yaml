@@ -20,7 +20,8 @@ map:
 devices:
   - /dev/hidraw0
   - /dev/hidraw1
-privileged: true
+privileged:
+  - all
 udev: true
 tmpfs: false
 options:
