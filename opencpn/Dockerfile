@@ -1,44 +1,54 @@
-# ──────────────────────────────── Stage 1: Builder
-FROM opencpn/opencpn-builder:latest AS build
+FROM debian:bullseye AS build
 
-# Install libnmea dependencies
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install full set of build dependencies
 RUN apt-get update && apt-get install -y \
-    git cmake build-essential \
- && rm -rf /var/lib/apt/lists/*
+  git build-essential cmake gettext \
+  libwxgtk3.0-gtk3-dev wx-common \
+  libglu1-mesa-dev freeglut3-dev mesa-common-dev \
+  libcurl4-gnutls-dev libtinyxml-dev zlib1g-dev libbz2-dev \
+  libarchive-dev libdrm-dev libelf-dev libexif-dev \
+  libgdk-pixbuf2.0-dev liblz4-dev liblzma-dev libpango1.0-dev \
+  libsqlite3-dev libunarr-dev libwxsvg-dev portaudio19-dev \
+  pkg-config usbutils udev
 
-# Build libnmea from source
-RUN git clone https://github.com/jacketizer/libnmea.git /tmp/libnmea \
- && cd /tmp/libnmea && mkdir build && cd build \
- && cmake .. && make && make install \
- && ldconfig && rm -rf /tmp/libnmea
+# Build and install libnmea
+RUN git clone https://github.com/jacketizer/libnmea.git /tmp/libnmea && \
+    cd /tmp/libnmea && mkdir build && cd build && \
+    cmake .. && make && make install && ldconfig && \
+    rm -rf /tmp/libnmea
 
-# Build OpenCPN v5.12.0
-RUN mkdir -p /src/opencpn && cd /src/opencpn \
- && wget https://github.com/OpenCPN/OpenCPN/archive/refs/tags/v5.12.0.tar.gz \
- && tar xf v5.12.0.tar.gz \
- && cd OpenCPN-5.12.0 && mkdir build && cd build \
- && cmake .. && make -j$(nproc) && make install
+# Download and build OpenCPN v5.12.0
+RUN mkdir -p /opencpn && cd /opencpn && \
+    wget https://github.com/OpenCPN/OpenCPN/archive/refs/tags/v5.12.0.tar.gz && \
+    tar xf v5.12.0.tar.gz && \
+    cd OpenCPN-5.12.0 && mkdir build && cd build && \
+    cmake .. && make -j$(nproc) && make install
 
-# ──────────────────────────────── Stage 2: Runtime
+# Final runtime stage
 FROM debian:bullseye-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     DISPLAY=:0
 
-# Runtime dependencies
+# Install runtime dependencies required by OpenCPN
 RUN apt-get update && apt-get install -y \
-   x11vnc xvfb fluxbox novnc websockify \
-   usbutils udev libgtk-3-0 libglew2.1 \
- && rm -rf /var/lib/apt/lists/*
+  bzip2 libarchive13 libbz2-1.0 libcurl3-gnutls libelf1 \
+  liblz4-1 liblzma5 libportaudio2 libsqlite3-0 \
+  libtinyxml2.6.2v5 libunarr1 \
+  libwxbase3.0-0v5 libwxgtk3.0-gtk3-0v5 libwxsvg3 \
+  libx11-6 \
+  x11vnc xvfb fluxbox novnc websockify usbutils udev \  
+  libgtk-3-0 libglew-dev && rm -rf /var/lib/apt/lists/*
 
-# Copy OpenCPN & libnmea
-COPY --from=build /usr/local/bin/opencpn /usr/local/bin/opencpn
+# Copy built binaries/libraries
+COPY --from=build /usr/local/bin/opencpn /usr/local/bin/
 COPY --from=build /usr/local/lib/libnmea* /usr/local/lib/
 RUN ldconfig
 
-# Add run script
+# Add your run script & expose port
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
-
 EXPOSE 6080
 CMD ["/run.sh"]
