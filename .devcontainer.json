@@ -1,20 +1,4 @@
-{
-  "name": "Home Assistant Add-on Dev",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": ".devcontainer"
-  },
-  "settings": {
-    "terminal.integrated.shell.linux": "/bin/bash"
-  },
-  "extensions": [
-    "esbenp.prettier-vscode",
-    "davidanson.vscode-markdownlint",
-    "ms-azuretools.vscode-docker"
-  ],
-  "remoteUser": "vscode",
-  "mounts": [
-    "source=${localWorkspaceFolder}/../home-assistant-config,target=/workspaces/home-assistant-config,type=bind"
-  ],
-  "postCreateCommand": "bash -c 'echo Dev container ready!'"
+"features": {
+  "ghcr.io/devcontainers/features/git:1": {},
+  "ghcr.io/devcontainers/features/docker-in-docker:2": {}
 }
