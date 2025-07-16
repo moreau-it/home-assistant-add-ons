@@ -1,12 +1,13 @@
+
 name: "OpenCPN"
-version: "5.12.0"
+version: "latest"
 slug: "opencpn"
-description: "Marine navigation app OpenCPN running as a Home Assistant add-on"
-url: "https://github.com/moreau-it/home-assistant-add-ons/tree/main/opencpn"
+description: "Marine navigation app OpenCPN running as a Home Assistant add-on with USB support"
+url: "https://github.com/OpenCPN/OpenCPN"
 arch:
-  - armhf
-  - armv7
   - aarch64
+  - armv7
+  - armhf
   - amd64
   - i386
 startup: services
@@ -15,15 +16,25 @@ init: false
 webui: "[PROTO:tcp]://[HOST]:[PORT:6080]/"
 ports:
   6080/tcp: 6080
-map:
-  - share:rw
+
 devices:
+  - /dev/ttyAMA0
+  - /dev/ttyUSB0
   - /dev/hidraw0
   - /dev/hidraw1
-#full_access: true
+
 udev: true
-tmpfs: false
+privileged:
+  - SYS_ADMIN
+  - NET_ADMIN
+  - SYS_RAWIO
+
+map:
+  - share:rw
+  - config:rw
+
 options:
-  message: "OpenCPN"
+  message: "OpenCPN add-on with live VNC, USB and GPS chart support"
+
 schema:
   message: str
