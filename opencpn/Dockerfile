@@ -1,9 +1,9 @@
-# ──────────────── Stage 1: Build OpenCPN and libnmea ────────────────
+# ──────────────────────────────── Stage 1: Build OpenCPN + libnmea
 FROM debian:bullseye AS build
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install all build dependencies
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     git build-essential cmake gettext wget \
     libwxgtk3.0-gtk3-dev wx-common \
@@ -16,9 +16,10 @@ RUN apt-get update && apt-get install -y \
     libglew-dev \
     libgtk2.0-0 libgtk-3-dev \
     pkg-config \
+    lsb-release \
  && apt-get clean
 
-# Build and install libnmea
+# Build libnmea from source
 RUN git clone https://github.com/jacketizer/libnmea.git /tmp/libnmea && \
     cd /tmp/libnmea && mkdir build && cd build && \
     cmake .. && make && make install && \
@@ -31,26 +32,25 @@ RUN mkdir -p /src/opencpn && cd /src/opencpn && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
     make -j$(nproc) && make install
 
-# ──────────────── Stage 2: Runtime Container ────────────────
+# ──────────────────────────────── Stage 2: Runtime
 FROM debian:bullseye-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:0
 
-# Install runtime packages
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     x11vnc xvfb fluxbox novnc websockify \
     usbutils udev \
     libgtk-3-0 libglew2.1 \
  && apt-get clean
 
-# Copy compiled binaries from builder
+# Copy OpenCPN binary and libnmea from build stage
 COPY --from=build /usr/local/bin/opencpn /usr/local/bin/opencpn
 COPY --from=build /usr/local/lib/libnmea* /usr/local/lib/
-COPY --from=build /usr/local/lib/ /usr/local/lib/
 RUN ldconfig
 
-# Include a run script (you must create this!)
+# Copy launcher script
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
 
