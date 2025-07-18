@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
+set -e
 
-# Start virtual display
+echo "[INFO] Starting Xvfb..."
 Xvfb :0 -screen 0 1024x768x16 &
 sleep 2
 
-# Start lightweight window manager
+echo "[INFO] Starting Fluxbox..."
 fluxbox &
 
-# Start VNC backend
-x11vnc -display :0 -forever -nopw &
+echo "[INFO] Starting x11vnc..."
+x11vnc -display :0 -forever -nopw -shared -bg
 
-# Start noVNC proxy (serves to port 6080)
+echo "[INFO] Starting noVNC web proxy..."
 websockify --web=/usr/share/novnc/ 6080 localhost:5900 &
 
-# Start OpenCPN GUI
-opencpn
+echo "[INFO] Starting OpenCPN..."
+opencpn || {
+  echo "[ERROR] OpenCPN failed to start, entering debug loop..."
+  tail -f /dev/null
+}
