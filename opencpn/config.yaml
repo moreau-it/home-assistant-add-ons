@@ -45,6 +45,5 @@ options:
 schema:
   message: str
 
-watchdog: true        # optional restart on failure
 # host_dbus: true     # optional – only enable if needed
 # tmpfs: true         # optional – GTK apps benefit sometimes
