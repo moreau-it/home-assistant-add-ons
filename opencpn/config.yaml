@@ -1,19 +1,22 @@
-
 name: "OpenCPN"
 version: "latest"
 slug: "opencpn"
 description: "Marine navigation app OpenCPN running as a Home Assistant add-on with USB support"
 url: "https://github.com/OpenCPN/OpenCPN"
+
 arch:
   - aarch64
   - armv7
   - armhf
   - amd64
   - i386
+
 startup: services
 boot: auto
 init: false
+
 webui: "[PROTO:tcp]://[HOST]:[PORT:6080]/"
+
 ports:
   6080/tcp: 6080
 
@@ -24,6 +27,9 @@ devices:
   - /dev/hidraw1
 
 udev: true
+stdin: true      # recommended for log access
+tty: true        # recommended for log access
+
 privileged:
   - SYS_ADMIN
   - NET_ADMIN
@@ -38,3 +44,7 @@ options:
 
 schema:
   message: str
+
+watchdog: true        # optional restart on failure
+# host_dbus: true     # optional – only enable if needed
+# tmpfs: true         # optional – GTK apps benefit sometimes
