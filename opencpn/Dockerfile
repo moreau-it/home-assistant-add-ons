@@ -70,6 +70,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libwxgtk3.2-1 \
+        libwxgtk-gl3.2-1 \
         libglu1-mesa \
         libsqlite3-0 \
         libtinyxml2-9 \
