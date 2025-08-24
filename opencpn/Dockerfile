@@ -31,6 +31,7 @@ RUN apt-get update && \
         libudev-dev \
         libusb-1.0-0-dev \
         libpthread-stubs0-dev \
+        libssl-dev \
         zlib1g-dev \
         libbz2-dev \
         libexpat1-dev && \
@@ -40,13 +41,10 @@ RUN apt-get update && \
 WORKDIR /src
 RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git OpenCPN
 
-# ---- Patch GarminHost linking ----
 WORKDIR /src/OpenCPN
 
-# Fix linking by explicitly adding pthread, usb-1.0 and udev to GarminHost
+# Patch GarminHost linking
 RUN sed -i '/add_library(GARMINHOST/a target_link_libraries(GARMINHOST pthread rt m usb-1.0 udev)' CMakeLists.txt
-
-# Also propagate these libs to OpenCPN itself
 RUN sed -i '/target_link_libraries(opencpn PRIVATE/ s/$/ pthread rt m usb-1.0 udev/' CMakeLists.txt
 
 # ---- Build OpenCPN ----
@@ -81,6 +79,7 @@ RUN apt-get update && \
         libarchive13 \
         libudev1 \
         libusb-1.0-0 \
+        libssl3 \
         zlib1g \
         libbz2-1.0 \
         libexpat1 \
