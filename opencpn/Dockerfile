@@ -1,92 +1,79 @@
-# =========================
-# Stage 1: Build OpenCPN
-# =========================
+# ==============================================================
+# Stage 1: Build OpenCPN from source
+# ==============================================================
+
 FROM debian:bookworm-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# ---- Install build dependencies ----
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential \
-        cmake \
-        pkg-config \
-        gettext \
-        git \
-        wget \
-        curl \
-        ca-certificates \
-        unzip \
-        tar \
-        lsb-release \
-        libwxgtk3.2-dev \
-        libglu1-mesa-dev \
-        libsqlite3-dev \
-        libtinyxml2-dev \
-        libtinyxml-dev \
-        libcurl4-openssl-dev \
-        libgtk-3-dev \
-        libglew-dev \
-        libarchive-dev \
-        libudev-dev \
-        libusb-1.0-0-dev \
-        libpthread-stubs0-dev \
-        libssl-dev \
-        zlib1g-dev \
-        libbz2-dev \
-        libexpat1-dev && \
-    rm -rf /var/lib/apt/lists/*
-
-# ---- Get OpenCPN source ----
-WORKDIR /src
-RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git OpenCPN
-
-WORKDIR /src/OpenCPN
-
-# Patch GarminHost linking
-RUN sed -i '/add_library(GARMINHOST/a target_link_libraries(GARMINHOST pthread rt m usb-1.0 udev)' CMakeLists.txt
-RUN sed -i '/target_link_libraries(opencpn PRIVATE/ s/$/ pthread rt m usb-1.0 udev/' CMakeLists.txt
-
-# ---- Build OpenCPN ----
-RUN mkdir -p build && cd build && \
-    cmake .. \
-      -DCMAKE_BUILD_TYPE=Release \
-      -DOCPN_BUNDLE_TCDATA=ON \
-      -DOCPN_FORCE_GTK3=ON \
-      -DOCPN_ENABLE_GARMINHOST=ON \
-      -DCMAKE_C_FLAGS="-fPIC -pthread" \
-      -DCMAKE_CXX_FLAGS="-fPIC -pthread" && \
-    make -j1 VERBOSE=1 && \
-    make install
-
-# =========================
-# Stage 2: Runtime Image
-# =========================
-FROM debian:bookworm-slim
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-# ========================
-# 2. RUNTIME STAGE
-# ========================
-FROM --platform=$TARGETPLATFORM debian:bookworm-slim
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-# ========================
-# 2. RUNTIME STAGE
-# ========================
-FROM debian:bookworm-slim
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install ALL required runtime libraries
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    pkg-config \
+    gettext \
+    git \
+    wget \
+    curl \
+    ca-certificates \
+    unzip \
+    tar \
+    lsb-release \
+    # wxWidgets + OpenGL dev
+    libwxgtk3.2-dev \
+    libglu1-mesa-dev \
+    # Core deps
+    libsqlite3-dev \
+    libtinyxml2-dev \
+    libtinyxml-dev \
+    libcurl4-openssl-dev \
+    libgtk-3-dev \
+    libglew-dev \
+    libarchive-dev \
+    libudev-dev \
+    libusb-1.0-0-dev \
+    libpthread-stubs0-dev \
+    libssl-dev \
+    zlib1g-dev \
+    libbz2-dev \
+    libexpat1-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone OpenCPN source
+WORKDIR /src
+RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git .
+
+# Create build folder
+WORKDIR /src/build
+
+# Configure with Garmin + GTK3
+RUN cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DOCPN_BUNDLE_TCDATA=ON \
+    -DOCPN_FORCE_GTK3=ON \
+    -DOCPN_ENABLE_GARMINHOST=ON \
+    -DCMAKE_C_FLAGS="-fPIC -pthread" \
+    -DCMAKE_CXX_FLAGS="-fPIC -pthread"
+
+# Build OpenCPN with 2 threads to avoid memory starvation on small systems
+RUN make -j2 && make install
+
+# ==============================================================
+# Stage 2: Runtime image
+# ==============================================================
+
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install OpenCPN runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # wxWidgets GTK3 + GL + HTML + Core + XML + Net + AUI + RichText
     libwxgtk3.2-1 \
+    libwxgtk3.2-dev \
     libglu1-mesa \
     libsqlite3-0 \
     libtinyxml2-9 \
-    libtinyxml2.6.2v5 \
     libcurl4 \
     libgtk-3-0 \
     libglew2.2 \
@@ -97,26 +84,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g \
     libbz2-1.0 \
     libexpat1 \
-    ca-certificates \
-    tzdata \
-    wget \
-    curl \
+    # Backwards compatibility for TinyXML 2.6.2
+    libtinyxml2.6.2v5 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy OpenCPN from builder
 COPY --from=builder /usr/local /usr/local
 
-# Fix dynamic linking path properly
-ENV LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/usr/lib/x86_64-linux-gnu"
+# Set library search path so wxWidgets GL + TinyXML are always found
+ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:$LD_LIBRARY_PATH
 
-CMD ["/usr/local/bin/opencpn"]
-
-# ---- Expose OpenCPN default NMEA ports ----
+# Expose default OpenCPN NMEA ports
 EXPOSE 10110/udp
 EXPOSE 10110/tcp
 
-# ---- Set default working dir ----
+# Default working dir
 WORKDIR /usr/local/bin
 
-# ---- Start OpenCPN ----
+# Start OpenCPN
 ENTRYPOINT ["opencpn"]
