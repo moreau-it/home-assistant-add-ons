@@ -73,14 +73,20 @@ FROM --platform=$TARGETPLATFORM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# ========================
+# 2. RUNTIME STAGE
+# ========================
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
 # Install ALL required runtime libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libwxgtk3.2-1 \
-    libwxgtk3.2-gl \
     libglu1-mesa \
     libsqlite3-0 \
     libtinyxml2-9 \
-    libtinyxml2.6.2 \
+    libtinyxml2.6.2v5 \
     libcurl4 \
     libgtk-3-0 \
     libglew2.2 \
@@ -100,8 +106,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy OpenCPN from builder
 COPY --from=builder /usr/local /usr/local
 
-# Ensure OpenCPN can find all libraries
-ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+# Fix dynamic linking path properly
+ENV LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/usr/lib/x86_64-linux-gnu"
 
 CMD ["/usr/local/bin/opencpn"]
 
