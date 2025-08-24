@@ -3,7 +3,7 @@ FROM debian:bookworm-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install build dependencies for OpenCPN (builder stage)
+# Install build dependencies for OpenCPN (builder)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
@@ -36,12 +36,13 @@ RUN apt-get update && \
 WORKDIR /src
 RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git .
 
-# Build OpenCPN safely on ARM64
+# Build OpenCPN with generic USB, Garmin disabled
 RUN mkdir -p build && cd build && \
     cmake .. \
       -DCMAKE_BUILD_TYPE=Release \
       -DOCPN_BUNDLE_TCDATA=ON \
-      -DOCPN_FORCE_GTK3=ON && \
+      -DOCPN_FORCE_GTK3=ON \
+      -DOCPN_ENABLE_GARMINHOST=OFF && \
     make -j2 && \
     make install
     
