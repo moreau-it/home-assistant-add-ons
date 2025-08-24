@@ -45,10 +45,11 @@ ENV LD_LIBRARY_PATH=/usr/local/lib
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    xfce4 xfce4-terminal tigervnc-standalone-server tigervnc-common websockify novnc \
+    xfce4 xfce4-terminal tigervnc-standalone-server tigervnc-common \
+    websockify novnc dbus-x11 x11-xserver-utils \
     libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
-    zlib1g libbz2-1.0 libexpat1 x11-xserver-utils \
+    zlib1g libbz2-1.0 libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy OpenCPN binaries from builder
@@ -72,7 +73,7 @@ EXPOSE 6080
 EXPOSE 10110/udp
 EXPOSE 10110/tcp
 
-# Startup script — choose password or insecure mode
+# Copy startup script — password / insecure mode handling
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
