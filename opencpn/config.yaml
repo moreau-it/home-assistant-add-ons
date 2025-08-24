@@ -48,6 +48,6 @@ options:
   message: "OpenCPN add-on with VNC, USB, GPS, and noVNC web support"
 
 schema:
-  vnc_password: str?
+  vnc_password: password
   allow_insecure_vnc: bool
   message: str
