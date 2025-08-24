@@ -40,9 +40,14 @@ RUN apt-get update && \
 WORKDIR /src
 RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git OpenCPN
 
-# ---- Patch GarminHost linking for ARM64 ----
+# ---- Patch GarminHost linking ----
 WORKDIR /src/OpenCPN
+
+# Fix linking by explicitly adding pthread, usb-1.0 and udev to GarminHost
 RUN sed -i '/add_library(GARMINHOST/a target_link_libraries(GARMINHOST pthread rt m usb-1.0 udev)' CMakeLists.txt
+
+# Also propagate these libs to OpenCPN itself
+RUN sed -i '/target_link_libraries(opencpn PRIVATE/ s/$/ pthread rt m usb-1.0 udev/' CMakeLists.txt
 
 # ---- Build OpenCPN ----
 RUN mkdir -p build && cd build && \
@@ -53,7 +58,7 @@ RUN mkdir -p build && cd build && \
       -DOCPN_ENABLE_GARMINHOST=ON \
       -DCMAKE_C_FLAGS="-fPIC -pthread" \
       -DCMAKE_CXX_FLAGS="-fPIC -pthread" && \
-    make -j2 && \
+    make -j1 VERBOSE=1 && \
     make install
 
 # =========================
