@@ -31,15 +31,6 @@ RUN apt-get update && \
         libexpat1-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Dependency check (optional but recommended)
-RUN echo "🔍 Verifying OpenCPN build deps..." && \
-    for pkg in build-essential cmake pkg-config gettext libwxgtk3.2-dev libglu1-mesa-dev \
-               libsqlite3-dev libtinyxml2-dev libtinyxml-dev libcurl4-openssl-dev libgtk-3-dev \
-               libglew-dev libarchive-dev libudev-dev zlib1g-dev libbz2-dev libexpat1-dev; do \
-        dpkg -s $pkg >/dev/null 2>&1 && echo "✅ $pkg installed" || echo "❌ $pkg missing"; \
-    done
-
-# Clone OpenCPN source
 WORKDIR /src
 RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git .
 
@@ -64,8 +55,6 @@ RUN apt-get update && \
         libglu1-mesa \
         libsqlite3-0 \
         libtinyxml2-9 \
-        libtinyxml2.6.2v5 \
-        libtinyxml2.6.2v5-dev \
         libcurl4 \
         libgtk-3-0 \
         libglew2.2 \
@@ -80,10 +69,9 @@ RUN apt-get update && \
         curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy built OpenCPN
+# Copy OpenCPN from builder
 COPY --from=builder /usr/local/ /usr/local/
 
-# Expose OpenCPN ports
 EXPOSE 10110/udp
 EXPOSE 10110/tcp
 
