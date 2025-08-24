@@ -1,10 +1,13 @@
+########################################
+# Stage 1 — Build OpenCPN
+########################################
 FROM debian:bookworm-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
 ENV VNC_RESOLUTION=1280x800
 
-# Build dependencies
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake pkg-config gettext git wget curl ca-certificates unzip tar lsb-release \
     libwxgtk3.2-dev libglu1-mesa-dev libsqlite3-dev libtinyxml2-dev libtinyxml-dev \
@@ -12,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpthread-stubs0-dev libssl-dev zlib1g-dev libbz2-dev libexpat1-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Clone OpenCPN source
 WORKDIR /src
 RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git .
 
@@ -27,37 +31,49 @@ RUN mkdir -p build && cd build && \
     make -j$(nproc) && \
     make install
 
-# -------------------------
-# Runtime
-# -------------------------
+########################################
+# Stage 2 — Runtime with VNC + noVNC
+########################################
 FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
 ENV VNC_RESOLUTION=1280x800
+ENV NOVNC_PORT=6080
+ENV VNC_PORT=5901
+ENV LD_LIBRARY_PATH=/usr/local/lib
 
-# Install runtime deps + desktop + VNC + noVNC
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    xfce4 xfce4-terminal tigervnc-standalone-server tigervnc-common \
-    novnc websockify \
-    libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libcurl4 \
+    xfce4 xfce4-terminal tigervnc-standalone-server tigervnc-common websockify novnc \
+    libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
-    zlib1g libbz2-1.0 libexpat1 x11-xserver-utils jq \
+    zlib1g libbz2-1.0 libexpat1 x11-xserver-utils \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy OpenCPN binaries from builder
 COPY --from=builder /usr/local /usr/local
-COPY run.sh /run.sh
 
-RUN chmod +x /run.sh
+# Configure VNC startup and OpenCPN autostart
+RUN mkdir -p /root/.vnc && \
+    echo '#!/bin/sh' > /root/.vnc/xstartup && \
+    echo 'unset SESSION_MANAGER' >> /root/.vnc/xstartup && \
+    echo 'unset DBUS_SESSION_BUS_ADDRESS' >> /root/.vnc/xstartup && \
+    echo 'startxfce4 &' >> /root/.vnc/xstartup && \
+    echo 'sleep 2' >> /root/.vnc/xstartup && \
+    echo 'opencpn &' >> /root/.vnc/xstartup && \
+    chmod +x /root/.vnc/xstartup
 
-# Expose ports
-# TigerVNC
+# Expose VNC + noVNC ports
 EXPOSE 5901
-# noVNC (web)
 EXPOSE 6080
-# NMEA TCP
-EXPOSE 10110/tcp
-# NMEA UDP
-EXPOSE 10110/udp
 
-CMD ["/run.sh"]
+# Expose OpenCPN NMEA ports
+EXPOSE 10110/udp
+EXPOSE 10110/tcp
+
+# Startup script — choose password or insecure mode
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+ENTRYPOINT ["/start.sh"]
