@@ -1,6 +1,8 @@
+# -------------------------
+# Stage 1: Build OpenCPN
+# -------------------------
 FROM debian:bookworm-slim AS builder
 
-# Environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV VNC_RESOLUTION=1280x800
 ENV DISPLAY=:1
@@ -30,26 +32,28 @@ RUN mkdir -p build && cd build && \
     make install
 
 # -------------------------
-# Final stage (runtime)
+# Stage 2: Final runtime image
 # -------------------------
 FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV VNC_RESOLUTION=1280x800
 ENV DISPLAY=:1
+ENV NOVNC_HOME=/usr/share/novnc
+ENV NOVNC_PORT=6080
 
-# Install runtime dependencies
+# Install runtime dependencies + TigerVNC + noVNC + websockify
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-terminal tigervnc-standalone-server tigervnc-common \
+    novnc websockify \
     libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
-    zlib1g libbz2-1.0 libexpat1 x11-xserver-utils \
+    zlib1g libbz2-1.0 libexpat1 x11-xserver-utils jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy OpenCPN from builder
+# Copy OpenCPN binaries from builder
 COPY --from=builder /usr/local /usr/local
 
-# Configure VNC startup with OpenCPN autostart
+# Create VNC startup script (Xfce + OpenCPN)
 RUN mkdir -p ~/.vnc && \
     echo '#!/bin/sh\n' \
          'unset SESSION_MANAGER\n' \
@@ -60,12 +64,22 @@ RUN mkdir -p ~/.vnc && \
     > ~/.vnc/xstartup && \
     chmod +x ~/.vnc/xstartup
 
-# Expose OpenCPN NMEA ports
-EXPOSE 10110/udp
-EXPOSE 10110/tcp
+# -------------------------
+# Add startup script
+# -------------------------
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
-# Expose VNC port
-EXPOSE 5901
+# -------------------------
+# Expose ports
+# -------------------------
+EXPOSE 10110/udp       # NMEA UDP
+EXPOSE 10110/tcp       # NMEA TCP
+EXPOSE 5901            # Direct VNC
+EXPOSE 6080            # noVNC web interface
 
-# Start VNC + OpenCPN
-CMD ["sh", "-c", "vncserver :1 -geometry $VNC_RESOLUTION -localhost no -SecurityTypes None && tail -F /root/.vnc/*.log"]
+# Default working directory
+WORKDIR /usr/local/bin
+
+# Start script
+ENTRYPOINT ["/start.sh"]
