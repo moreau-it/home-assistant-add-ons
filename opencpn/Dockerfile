@@ -64,7 +64,7 @@ RUN apt-get update && \
 RUN apt-get remove -y cmake && \
     wget https://github.com/Kitware/CMake/releases/download/v3.27.9/cmake-3.27.9-linux-aarch64.tar.gz && \
     tar -xzf cmake-3.27.9-linux-aarch64.tar.gz && \
-    cp -r cmake-3.27.9-linux-aarch64/* /usr/local/ && \
+    cp -r --remove-destination cmake-3.27.9-linux-aarch64/* /usr/local/ && \
     rm -rf cmake-3.27.9-linux-aarch64* && \
     cmake --version
 
