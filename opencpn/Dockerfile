@@ -62,8 +62,11 @@ EXPOSE 10110/udp
 EXPOSE 10110/tcp
 
 # Expose VNC ports
-EXPOSE 5901      # TigerVNC
-EXPOSE 6080      # noVNC (web)
+
+# TigerVNC port
+EXPOSE 5901
+# noVNC web port
+EXPOSE 6080
 
 # Default working directory
 WORKDIR /usr/local/bin
