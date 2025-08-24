@@ -3,7 +3,7 @@ FROM debian:bookworm-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install build dependencies for OpenCPN
+# Install build dependencies for OpenCPN (builder stage)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
@@ -27,6 +27,7 @@ RUN apt-get update && \
         libglew-dev \
         libarchive-dev \
         libudev-dev \
+        libusb-1.0-0-dev \
         zlib1g-dev \
         libbz2-dev \
         libexpat1-dev && \
@@ -35,15 +36,15 @@ RUN apt-get update && \
 WORKDIR /src
 RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git .
 
-# Build OpenCPN
+# Build OpenCPN safely on ARM64
 RUN mkdir -p build && cd build && \
     cmake .. \
       -DCMAKE_BUILD_TYPE=Release \
       -DOCPN_BUNDLE_TCDATA=ON \
       -DOCPN_FORCE_GTK3=ON && \
-    make -j$(nproc) && \
+    make -j2 && \
     make install
-
+    
 # ===== Stage 2: Runtime Image =====
 FROM debian:bookworm-slim
 
