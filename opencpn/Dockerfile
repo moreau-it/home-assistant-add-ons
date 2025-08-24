@@ -20,35 +20,24 @@ RUN apt-get update && \
         libglu1-mesa-dev \
         libsqlite3-dev \
         libtinyxml2-dev \
+        libtinyxml-dev \
         libcurl4-openssl-dev \
         libgtk-3-dev \
         libglew-dev \
+        libarchive-dev \
+        libudev-dev \
         zlib1g-dev \
         libbz2-dev \
         libexpat1-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Run dependency checker inline
-RUN echo '#!/bin/bash\n' \
-    'set -e\n' \
-    'echo "🔍 Checking OpenCPN build dependencies..."\n' \
-    'MISSING=false\n' \
-    'DEPS="build-essential cmake pkg-config gettext libwxgtk3.2-dev libglu1-mesa-dev libsqlite3-dev libtinyxml2-dev libcurl4-openssl-dev libgtk-3-dev libglew-dev zlib1g-dev libbz2-dev libexpat1-dev"\n' \
-    'for pkg in $DEPS; do\n' \
-    '  if ! dpkg -s $pkg >/dev/null 2>&1; then\n' \
-    '    echo "❌ Missing: $pkg"\n' \
-    '    MISSING=true\n' \
-    '  else\n' \
-    '    echo "✅ $pkg"\n' \
-    '  fi\n' \
-    'done\n' \
-    'if [ "$MISSING" = true ]; then\n' \
-    '  echo "⚠️ Missing dependencies detected. Aborting build."\n' \
-    '  exit 1\n' \
-    'else\n' \
-    '  echo "🎉 All build dependencies are installed!"\n' \
-    'fi\n' \
-    > /check_opencpn_deps.sh && chmod +x /check_opencpn_deps.sh && /check_opencpn_deps.sh
+# Dependency check (optional but recommended)
+RUN echo "🔍 Verifying OpenCPN build deps..." && \
+    for pkg in build-essential cmake pkg-config gettext libwxgtk3.2-dev libglu1-mesa-dev \
+               libsqlite3-dev libtinyxml2-dev libtinyxml-dev libcurl4-openssl-dev libgtk-3-dev \
+               libglew-dev libarchive-dev libudev-dev zlib1g-dev libbz2-dev libexpat1-dev; do \
+        dpkg -s $pkg >/dev/null 2>&1 && echo "✅ $pkg installed" || echo "❌ $pkg missing"; \
+    done
 
 # Clone OpenCPN source
 WORKDIR /src
@@ -75,9 +64,13 @@ RUN apt-get update && \
         libglu1-mesa \
         libsqlite3-0 \
         libtinyxml2-9 \
+        libtinyxml2.6.2v5 \
+        libtinyxml2.6.2v5-dev \
         libcurl4 \
         libgtk-3-0 \
         libglew2.2 \
+        libarchive13 \
+        libudev1 \
         zlib1g \
         libbz2-1.0 \
         libexpat1 \
@@ -87,7 +80,7 @@ RUN apt-get update && \
         curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy built OpenCPN from builder
+# Copy built OpenCPN
 COPY --from=builder /usr/local/ /usr/local/
 
 # Expose OpenCPN ports
