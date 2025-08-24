@@ -3,52 +3,48 @@ set -e
 
 echo "[INFO] Starting OpenCPN Home Assistant Add-on..."
 
-mkdir -p /root/.vnc
+CONFIG_PATH=/data/options.json
+VNC_PASS=$(jq -r '.vnc_password' $CONFIG_PATH)
+INSECURE_MODE=$(jq -r '.insecure_mode' $CONFIG_PATH)
 
-if [ -n "$VNC_PASSWORD" ]; then
-    echo "[INFO] Secured VNC mode enabled."
-    echo "$VNC_PASSWORD" | vncpasswd -f > /root/.vnc/passwd
-    chmod 600 /root/.vnc/passwd
-    vncserver :1 -geometry $VNC_RESOLUTION -rfbauth /root/.vnc/passwd
-else
-    if [ "$INSECURE_MODE" = "true" ]; then
-        echo "[WARNING] Starting VNC in INSECURE MODE!"
-        vncserver :1 -geometry $VNC_RESOLUTION --I-KNOW-THIS-IS-INSECURE -SecurityTypes None
-    else
+# If no password and insecure mode disabled → stop and print clear error
+if [[ -z "$VNC_PASS" || "$VNC_PASS" == "null" ]]; then
+    if [[ "$INSECURE_MODE" == "false" ]]; then
         echo "[ERROR] No VNC password set! Enable insecure mode in config or add a password."
         exit 1
     fi
+    echo "[INFO] Starting VNC in INSECURE mode (no authentication)."
+    export VNC_OPTIONS="--I-KNOW-THIS-IS-INSECURE -SecurityTypes None"
+else
+    echo "[INFO] Setting VNC password..."
+    mkdir -p /root/.vnc
+    echo "$VNC_PASS" | vncpasswd -f > /root/.vnc/passwd
+    chmod 600 /root/.vnc/passwd
+    export VNC_OPTIONS="-PasswordFile /root/.vnc/passwd"
 fi
 
-# Wait until X server is up
-for i in $(seq 1 10); do
-    if xdpyinfo -display :1 >/dev/null 2>&1; then
-        echo "[INFO] X server is ready."
-        break
-    fi
-    echo "[INFO] Waiting for X server..."
-    sleep 1
-done
-
-# Generate .Xauthority once X11 is ready
-if [ ! -f /root/.Xauthority ]; then
-    touch /root/.Xauthority
-    xauth generate :1 . trusted || true
-    echo "[INFO] Xauthority generated for display :1"
-fi
-
-# Start XFCE desktop environment
-echo "[INFO] Starting XFCE4 desktop..."
-startxfce4 &
+# Start VNC server
+vncserver :1 -geometry ${VNC_RESOLUTION:-1280x800} $VNC_OPTIONS
 
 # Start noVNC in background
-echo "[INFO] Starting noVNC on port 6080..."
-websockify --web=/usr/share/novnc/ --wrap-mode=ignore 0.0.0.0:6080 localhost:5901 &
+echo "[INFO] Starting noVNC web interface on port 6080..."
+/usr/share/novnc/utils/novnc_proxy --vnc localhost:5901 --listen 6080 &
 
-# Launch OpenCPN
-sleep 3
-echo "[INFO] Launching OpenCPN..."
+# Start XFCE session
+if [[ ! -f /root/.vnc/xstartup ]]; then
+    echo "[INFO] Configuring VNC xstartup..."
+    mkdir -p /root/.vnc
+    cat <<EOF > /root/.vnc/xstartup
+#!/bin/sh
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+startxfce4 &
+sleep 2
 opencpn &
+EOF
+    chmod +x /root/.vnc/xstartup
+fi
 
-# Keep container alive
+# Keep container running and stream logs
+echo "[INFO] OpenCPN add-on running. Connect via VNC or http://<homeassistant>:6080"
 tail -F /root/.vnc/*.log
