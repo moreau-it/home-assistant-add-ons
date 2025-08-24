@@ -43,7 +43,7 @@ map:
   - config:rw
 
 options:
-  vnc_password: "admin"
+  vnc_password: ""
   insecure_mode: false
   message: "OpenCPN add-on with VNC, USB, GPS, and noVNC web support"
 
