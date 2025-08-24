@@ -15,11 +15,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpthread-stubs0-dev libssl-dev zlib1g-dev libbz2-dev libexpat1-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Clone OpenCPN source
 WORKDIR /src
 RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git .
 
-# Build OpenCPN
 RUN mkdir -p build && cd build && \
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
@@ -43,39 +41,36 @@ ENV NOVNC_PORT=6080
 ENV VNC_PORT=5901
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
-# Install runtime dependencies + jq for config parsing + desktop fixes
+# Install runtime dependencies + fixes for XFCE + DBus
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    xfce4 xfce4-goodies xfce4-terminal tigervnc-standalone-server tigervnc-common \
-    websockify novnc dbus-x11 at-spi2-core libnotify-bin gvfs libnss3 \
-    x11-xserver-utils jq xauth pm-utils upower policykit-1 \
+    xfce4 xfce4-goodies xfce4-terminal xfce4-session \
+    tigervnc-standalone-server tigervnc-common novnc websockify \
+    dbus-x11 gvfs gvfs-backends policykit-1 libpam-systemd \
+    x11-xserver-utils xauth jq \
     libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy OpenCPN binaries from builder
+# Copy OpenCPN binaries
 COPY --from=builder /usr/local /usr/local
 
-# Configure VNC startup and OpenCPN autostart
+# Configure VNC + XFCE startup
 RUN mkdir -p /root/.vnc && \
     echo '#!/bin/sh' > /root/.vnc/xstartup && \
     echo 'unset SESSION_MANAGER' >> /root/.vnc/xstartup && \
     echo 'unset DBUS_SESSION_BUS_ADDRESS' >> /root/.vnc/xstartup && \
     echo 'export XAUTHORITY=/root/.Xauthority' >> /root/.vnc/xstartup && \
-    echo 'exec dbus-launch --exit-with-session startxfce4 &' >> /root/.vnc/xstartup && \
+    echo 'dbus-launch --exit-with-session startxfce4 &' >> /root/.vnc/xstartup && \
     echo 'sleep 2' >> /root/.vnc/xstartup && \
     echo 'opencpn &' >> /root/.vnc/xstartup && \
     chmod +x /root/.vnc/xstartup
 
-# Expose VNC + noVNC ports
 EXPOSE 5901
 EXPOSE 6080
-
-# Expose OpenCPN NMEA ports
 EXPOSE 10110/udp
 EXPOSE 10110/tcp
 
-# Copy startup script — password / insecure mode handling
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
