@@ -41,16 +41,12 @@ map:
 
 options:
   message: "OpenCPN add-on with live VNC, USB, and GPS chart support"
-  vnc_auth_required: false      # If false, VNC starts without a password
-  vnc_password: ""             # Leave empty to disable authentication  
+  vnc_auth_required: true
+  vnc_password: "mypassword"
 
 schema:
-  message: str
-  vnc_password: str?
   vnc_auth_required: bool
-
-schema:
-  message: str
+  vnc_password: password?
 
 # host_dbus: true     # optional – only enable if needed
 # tmpfs: true         # optional – GTK apps benefit sometimes
