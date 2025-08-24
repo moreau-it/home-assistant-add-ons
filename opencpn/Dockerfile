@@ -66,32 +66,44 @@ FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# ---- Install runtime libraries ----
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        libwxgtk3.2-1 \
-        libwxgtk-gl3.2-1 \
-        libglu1-mesa \
-        libsqlite3-0 \
-        libtinyxml2-9 \
-        libcurl4 \
-        libgtk-3-0 \
-        libglew2.2 \
-        libarchive13 \
-        libudev1 \
-        libusb-1.0-0 \
-        libssl3 \
-        zlib1g \
-        libbz2-1.0 \
-        libexpat1 \
-        ca-certificates \
-        tzdata \
-        wget \
-        curl && \
-    rm -rf /var/lib/apt/lists/*
+# ========================
+# 2. RUNTIME STAGE
+# ========================
+FROM --platform=$TARGETPLATFORM debian:bookworm-slim
 
-# ---- Copy OpenCPN from builder ----
-COPY --from=builder /usr/local/ /usr/local/
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install ALL required runtime libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libwxgtk3.2-1 \
+    libwxgtk3.2-gl \
+    libglu1-mesa \
+    libsqlite3-0 \
+    libtinyxml2-9 \
+    libtinyxml2.6.2 \
+    libcurl4 \
+    libgtk-3-0 \
+    libglew2.2 \
+    libarchive13 \
+    libudev1 \
+    libusb-1.0-0 \
+    libssl3 \
+    zlib1g \
+    libbz2-1.0 \
+    libexpat1 \
+    ca-certificates \
+    tzdata \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy OpenCPN from builder
+COPY --from=builder /usr/local /usr/local
+
+# Ensure OpenCPN can find all libraries
+ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+
+CMD ["/usr/local/bin/opencpn"]
 
 # ---- Expose OpenCPN default NMEA ports ----
 EXPOSE 10110/udp
