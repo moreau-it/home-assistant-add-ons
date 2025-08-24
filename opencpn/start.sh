@@ -1,58 +1,61 @@
 #!/bin/bash
 set -e
 
-echo "[INFO] Starting OpenCPN Home Assistant Add-on..."
-
 CONFIG_PATH=/data/options.json
+VNC_PASSWD_FILE=/root/.vnc/passwd
 
-# Log the entire config for debugging
+echo "[INFO] Starting OpenCPN Home Assistant Add-on..."
 echo "[DEBUG] Loaded options.json:"
 cat $CONFIG_PATH
 
-VNC_PASS=$(jq -r '.vnc_password' "$CONFIG_PATH")
-INSECURE_MODE=$(jq -r '.insecure_mode' "$CONFIG_PATH")
+# Extract config values using jq
+VNC_PASSWORD=$(jq -r '.vnc_password // ""' "$CONFIG_PATH")
+INSECURE_MODE=$(jq -r '.insecure_mode // false' "$CONFIG_PATH")
 
-echo "[DEBUG] vnc_password = '$VNC_PASS'"
+echo "[DEBUG] vnc_password = '$VNC_PASSWORD'"
 echo "[DEBUG] insecure_mode = '$INSECURE_MODE'"
 
-# Check if password exists OR insecure mode enabled
-if [[ "$VNC_PASS" == "null" || -z "$VNC_PASS" ]]; then
-    if [[ "$INSECURE_MODE" != "true" ]]; then
-        echo "[ERROR] No VNC password set! Enable insecure mode in config or add a password."
-        exit 1
-    fi
-    echo "[INFO] Starting VNC in INSECURE mode (no authentication)."
-    export VNC_OPTIONS="--I-KNOW-THIS-IS-INSECURE -SecurityTypes None"
+# Ensure the .vnc directory exists
+mkdir -p /root/.vnc
+
+# If insecure mode is disabled but no password provided → fail
+if [ "$INSECURE_MODE" != "true" ] && [ -z "$VNC_PASSWORD" ]; then
+    echo "[ERROR] No VNC password set! Enable insecure mode or add a password."
+    exit 1
+fi
+
+# Configure password if provided
+if [ -n "$VNC_PASSWORD" ]; then
+    echo "[INFO] Setting VNC password."
+    echo "$VNC_PASSWORD" | vncpasswd -f > $VNC_PASSWD_FILE
+    chmod 600 $VNC_PASSWD_FILE
+    VNC_AUTH_OPTS="-rfbauth $VNC_PASSWD_FILE"
 else
-    echo "[INFO] Setting VNC password..."
-    mkdir -p /root/.vnc
-    echo "$VNC_PASS" | vncpasswd -f > /root/.vnc/passwd
-    chmod 600 /root/.vnc/passwd
-    export VNC_OPTIONS="-PasswordFile /root/.vnc/passwd"
+    echo "[INFO] Starting VNC in INSECURE mode (no authentication)."
+    VNC_AUTH_OPTS="--I-KNOW-THIS-IS-INSECURE -SecurityTypes None"
 fi
 
-# Start VNC server
-vncserver :1 -geometry ${VNC_RESOLUTION:-1280x800} $VNC_OPTIONS
+# Export DISPLAY
+export DISPLAY=:1
+export XAUTHORITY=/root/.Xauthority
 
-# Start noVNC
-echo "[INFO] Starting noVNC on port 6080..."
-/usr/share/novnc/utils/novnc_proxy --vnc localhost:5901 --listen 6080 &
+# Start TigerVNC server
+echo "[INFO] Starting TigerVNC server on :1"
+vncserver :1 -geometry ${VNC_RESOLUTION:-1280x800} $VNC_AUTH_OPTS
 
-# Configure XFCE session if missing
-if [[ ! -f /root/.vnc/xstartup ]]; then
-    echo "[INFO] Configuring VNC xstartup..."
-    mkdir -p /root/.vnc
-    cat <<EOF > /root/.vnc/xstartup
-#!/bin/sh
-unset SESSION_MANAGER
-unset DBUS_SESSION_BUS_ADDRESS
-startxfce4 &
-sleep 2
+# Start noVNC (web-based VNC)
+echo "[INFO] Starting noVNC on port 6080"
+websockify --web=/usr/share/novnc/ 0.0.0.0:6080 localhost:5901 &
+
+# Start XFCE desktop environment
+echo "[INFO] Starting XFCE4 desktop environment"
+dbus-launch startxfce4 &
+
+# Start OpenCPN automatically after desktop is ready
+sleep 3
+echo "[INFO] Starting OpenCPN..."
 opencpn &
-EOF
-    chmod +x /root/.vnc/xstartup
-fi
 
-# Keep container running
-echo "[INFO] OpenCPN add-on running. Connect via VNC or http://<homeassistant>:6080"
+# Tail VNC logs for Home Assistant visibility
+echo "[INFO] Tailing VNC logs..."
 tail -F /root/.vnc/*.log
