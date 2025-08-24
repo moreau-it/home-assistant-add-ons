@@ -16,6 +16,7 @@ RUN apt-get update && \
         ca-certificates \
         unzip \
         tar \
+        lsb-release \
         libwxgtk3.2-dev \
         libglu1-mesa-dev \
         libsqlite3-dev \
@@ -69,9 +70,10 @@ RUN apt-get update && \
         curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy OpenCPN from builder
+# Copy built OpenCPN
 COPY --from=builder /usr/local/ /usr/local/
 
+# Expose OpenCPN ports
 EXPOSE 10110/udp
 EXPOSE 10110/tcp
 
