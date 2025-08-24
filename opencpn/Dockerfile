@@ -1,12 +1,10 @@
-# -------------------------
-# Stage 1: Build OpenCPN
-# -------------------------
 FROM debian:bookworm-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
+ENV VNC_RESOLUTION=1280x800
 
-# Install build dependencies
+# Build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake pkg-config gettext git wget curl ca-certificates unzip tar lsb-release \
     libwxgtk3.2-dev libglu1-mesa-dev libsqlite3-dev libtinyxml2-dev libtinyxml-dev \
@@ -14,7 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpthread-stubs0-dev libssl-dev zlib1g-dev libbz2-dev libexpat1-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Clone OpenCPN source
 WORKDIR /src
 RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git .
 
@@ -31,44 +28,36 @@ RUN mkdir -p build && cd build && \
     make install
 
 # -------------------------
-# Stage 2: Runtime container
+# Runtime
 # -------------------------
 FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
-ENV NOVNC_HOME=/usr/share/novnc
-ENV NOVNC_PORT=6080
 ENV VNC_RESOLUTION=1280x800
 
-# Install runtime deps + XFCE + TigerVNC + noVNC + USB tools
+# Install runtime deps + desktop + VNC + noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-terminal tigervnc-standalone-server tigervnc-common \
     novnc websockify \
     libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
-    zlib1g libbz2-1.0 libexpat1 x11-xserver-utils jq usbutils \
+    zlib1g libbz2-1.0 libexpat1 x11-xserver-utils jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy OpenCPN binaries from builder
 COPY --from=builder /usr/local /usr/local
+COPY run.sh /run.sh
 
-# Add our startup script
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
+RUN chmod +x /run.sh
 
-# Expose OpenCPN NMEA ports
-EXPOSE 10110/udp
-EXPOSE 10110/tcp
-
-# Expose VNC ports
-
-# TigerVNC port
+# Expose ports
+# TigerVNC
 EXPOSE 5901
-# noVNC web port
+# noVNC (web)
 EXPOSE 6080
+# NMEA TCP
+EXPOSE 10110/tcp
+# NMEA UDP
+EXPOSE 10110/udp
 
-# Default working directory
-WORKDIR /usr/local/bin
-
-ENTRYPOINT ["/start.sh"]
+CMD ["/run.sh"]
