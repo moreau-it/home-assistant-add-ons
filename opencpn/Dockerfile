@@ -43,10 +43,10 @@ ENV NOVNC_PORT=6080
 ENV VNC_PORT=5901
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
-# Install runtime dependencies (+ jq for config parsing)
+# Install runtime dependencies + jq for config parsing
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-terminal tigervnc-standalone-server tigervnc-common \
-    websockify novnc dbus-x11 x11-xserver-utils jq \
+    websockify novnc dbus-x11 x11-xserver-utils jq xauth \
     libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
@@ -60,7 +60,8 @@ RUN mkdir -p /root/.vnc && \
     echo '#!/bin/sh' > /root/.vnc/xstartup && \
     echo 'unset SESSION_MANAGER' >> /root/.vnc/xstartup && \
     echo 'unset DBUS_SESSION_BUS_ADDRESS' >> /root/.vnc/xstartup && \
-    echo 'startxfce4 &' >> /root/.vnc/xstartup && \
+    echo 'export XAUTHORITY=/root/.Xauthority' >> /root/.vnc/xstartup && \
+    echo 'dbus-launch startxfce4 &' >> /root/.vnc/xstartup && \
     echo 'sleep 2' >> /root/.vnc/xstartup && \
     echo 'opencpn &' >> /root/.vnc/xstartup && \
     chmod +x /root/.vnc/xstartup
