@@ -38,7 +38,7 @@ RUN apt-get update && \
 
 # ---- Get OpenCPN source ----
 WORKDIR /src
-RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git .
+RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git OpenCPN
 
 # ---- Patch GarminHost linking for ARM64 ----
 WORKDIR /src/OpenCPN
