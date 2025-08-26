@@ -1,5 +1,5 @@
 #!/bin/sh
-# ~/.vnc/xstartup
+# /root/.xstartup
 
 export XKL_XMODMAP_DISABLE=1
 export XAUTHORITY=/root/.Xauthority
@@ -13,6 +13,3 @@ fi
 
 # Start XFCE session
 startxfce4 &
-
-# Keep session alive with terminal fallback
-xterm -hold -geometry 80x24+10+10 &
