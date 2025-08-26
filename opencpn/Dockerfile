@@ -62,7 +62,8 @@ RUN mkdir -p /root/.vnc && \
     'unset SESSION_MANAGER' \
     'unset DBUS_SESSION_BUS_ADDRESS' \
     'export XAUTHORITY=/root/.Xauthority' \
-    'dbus-launch --exit-with-session startxfce4' \
+    '[ -f /root/.Xauthority ] || touch /root/.Xauthority' \
+    'dbus-launch --exit-with-session startxfce4 &' \
     > /root/.vnc/xstartup && \
     chmod +x /root/.vnc/xstartup
 
