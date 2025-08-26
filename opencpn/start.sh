@@ -23,55 +23,36 @@ echo "[DEBUG] insecure_mode='${INSECURE_MODE}'"
 # Prepare VNC environment
 mkdir -p /root/.vnc
 export XAUTHORITY=/root/.Xauthority
+touch "$XAUTHORITY"
 
-# Always create a fresh Xauthority file to avoid race conditions
-if [ ! -f "$XAUTHORITY" ]; then
-    echo "[INFO] Creating new Xauthority file..."
-    touch "$XAUTHORITY"
-fi
-
-# Start DBus service for XFCE and VNC session
+# Start DBus
 echo "[INFO] Starting DBus..."
 mkdir -p /var/run/dbus
 dbus-daemon --system --fork
 
-# Configure VNC security options
+# Configure VNC server
 if [ "$INSECURE_MODE" = "true" ]; then
-    echo "[INFO] Starting VNC in INSECURE mode (no authentication)..."
+    echo "[INFO] Starting VNC in INSECURE mode..."
     VNC_CMD="vncserver :1 -geometry ${VNC_RESOLUTION} -localhost no -SecurityTypes None --I-KNOW-THIS-IS-INSECURE"
 else
     if [ -z "$VNC_PASSWORD" ] || [ "$VNC_PASSWORD" = "null" ]; then
-        echo "[ERROR] VNC password not set! Either enable insecure mode or provide a password."
+        echo "[ERROR] VNC password not set!"
         exit 1
     fi
     echo "[INFO] Setting VNC password..."
-    mkdir -p /root/.vnc
-    # Create password file non-interactively (no echo to logs)
     (echo "$VNC_PASSWORD" && echo "$VNC_PASSWORD") | vncpasswd -f > /root/.vnc/passwd
     chmod 600 /root/.vnc/passwd
-    echo "[INFO] Starting VNC with PASSWORD authentication..."
     VNC_CMD="vncserver :1 -geometry ${VNC_RESOLUTION} -localhost no -rfbauth /root/.vnc/passwd"
 fi
 
-# Start TigerVNC server
+# Start VNC server
 echo "[INFO] Starting TigerVNC server on display :1..."
 eval $VNC_CMD
 
-# Start noVNC in background
+# Start noVNC
 echo "[INFO] Starting noVNC on port ${NOVNC_PORT}..."
 websockify --web=/usr/share/novnc/ ${NOVNC_PORT} localhost:${VNC_PORT} &
 
-# Start XFCE session cleanly
-echo "[INFO] Launching XFCE desktop environment..."
-export DISPLAY=:1
-dbus-launch --exit-with-session startxfce4 &
-
-# Delay to allow XFCE to fully start
-sleep 3
-
-# Start OpenCPN
-echo "[INFO] Launching OpenCPN..."
-opencpn &
-
+# Container is now running; logs will show status
 echo "[INFO] OpenCPN with VNC & noVNC is now running!"
 tail -F /root/.vnc/*.log
