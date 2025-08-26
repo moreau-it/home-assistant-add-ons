@@ -30,7 +30,7 @@ RUN mkdir -p build && cd build && \
     make install
 
 ########################################
-# Stage 2 — Runtime with noVNC only
+# Stage 2 — Runtime with VNC + noVNC
 ########################################
 FROM debian:bookworm-slim
 
@@ -38,14 +38,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
 ENV VNC_RESOLUTION=1280x800
 ENV NOVNC_PORT=6080
+ENV VNC_PORT=5901
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
-# Install runtime dependencies + XFCE + DBus + noVNC
+# Install runtime dependencies + fixes for XFCE + DBus
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-goodies xfce4-terminal xfce4-session \
-    xvfb x11-xserver-utils xauth jq \
-    novnc websockify dbus-x11 gvfs gvfs-backends policykit-1 libpam-systemd \
-    libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libcurl4 \
+    tigervnc-standalone-server tigervnc-common tigervnc-tools \
+    novnc websockify \
+    dbus-x11 gvfs gvfs-backends policykit-1 libpam-systemd \
+    x11-xserver-utils xauth jq \
+    libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
     && rm -rf /var/lib/apt/lists/*
@@ -53,12 +56,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy OpenCPN binaries
 COPY --from=builder /usr/local /usr/local
 
-# Expose noVNC port and OpenCPN default port
+# Configure VNC + XFCE startup
+RUN mkdir -p /root/.vnc && \
+    echo '#!/bin/sh' > /root/.vnc/xstartup && \
+    echo 'unset SESSION_MANAGER' >> /root/.vnc/xstartup && \
+    echo 'unset DBUS_SESSION_BUS_ADDRESS' >> /root/.vnc/xstartup && \
+    echo 'export XAUTHORITY=/root/.Xauthority' >> /root/.vnc/xstartup && \
+    echo 'dbus-launch --exit-with-session startxfce4 &' >> /root/.vnc/xstartup && \
+    echo 'sleep 2' >> /root/.vnc/xstartup && \
+    echo 'opencpn &' >> /root/.vnc/xstartup && \
+    chmod +x /root/.vnc/xstartup
+
+EXPOSE 5901
 EXPOSE 6080
 EXPOSE 10110/udp
 EXPOSE 10110/tcp
 
-# Copy startup script
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
