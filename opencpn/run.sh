@@ -28,11 +28,10 @@ elif [[ "$ALLOW_INSECURE" == "true" ]]; then
     VNC_ARGS="-SecurityTypes None --I-KNOW-THIS-IS-INSECURE"
 else
     echo "[OpenCPN] ERROR: No VNC password set and insecure mode disabled!"
-    echo "Please set a password or enable insecure mode."
     exit 1
 fi
 
-# Start XFCE + VNC server
+# Start TigerVNC (will run ~/.vnc/xstartup automatically)
 echo "[OpenCPN] Starting TigerVNC on :1"
 vncserver :1 -geometry ${VNC_RESOLUTION:-1280x800} -localhost no $VNC_ARGS
 
@@ -40,7 +39,8 @@ vncserver :1 -geometry ${VNC_RESOLUTION:-1280x800} -localhost no $VNC_ARGS
 echo "[OpenCPN] Starting noVNC on port 6080"
 websockify --web=/usr/share/novnc/ 6080 localhost:5901 &
 
-# Launch OpenCPN
+# Launch OpenCPN (wait a bit so XFCE session is ready)
+sleep 3
 echo "[OpenCPN] Launching OpenCPN..."
 export DISPLAY=:1
 opencpn &
