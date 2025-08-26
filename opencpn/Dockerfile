@@ -41,9 +41,9 @@ ENV NOVNC_PORT=6080
 ENV VNC_PORT=5901
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
-# Install runtime dependencies + XFCE + DBus + VNC
+# Install runtime dependencies + XFCE + DBus + VNC + xterm
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    xfce4 xfce4-goodies xfce4-terminal xfce4-session \
+    xfce4 xfce4-goodies xfce4-terminal xfce4-session xterm \
     tigervnc-standalone-server tigervnc-common tigervnc-tools \
     novnc websockify \
     dbus-x11 gvfs gvfs-backends policykit-1 libpam-systemd \
@@ -51,30 +51,4 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy OpenCPN binaries
-COPY --from=builder /usr/local /usr/local
-
-# Configure VNC + XFCE startup (baked into image)
-RUN mkdir -p /root/.vnc && \
-    printf '%s\n' '#!/bin/sh' \
-    'unset SESSION_MANAGER' \
-    'unset DBUS_SESSION_BUS_ADDRESS' \
-    'export XAUTHORITY=/root/.Xauthority' \
-    '[ -f /root/.Xauthority ] || touch /root/.Xauthority' \
-    'dbus-launch --exit-with-session startxfce4 &' \
-    > /root/.vnc/xstartup && \
-    chmod +x /root/.vnc/xstartup
-
-# Expose VNC / noVNC / OpenCPN ports
-EXPOSE 5901
-EXPOSE 6080
-EXPOSE 10110/udp
-EXPOSE 10110/tcp
-
-# Copy startup script
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
-
-ENTRYPOINT ["/start.sh"]
+    && rm -rf /var/
