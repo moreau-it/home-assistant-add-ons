@@ -56,23 +56,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy OpenCPN binaries
 COPY --from=builder /usr/local /usr/local
 
-# Configure VNC + XFCE startup
-RUN mkdir -p /root/.vnc && \
-    echo '#!/bin/sh' > /root/.vnc/xstartup && \
-    echo 'unset SESSION_MANAGER' >> /root/.vnc/xstartup && \
-    echo 'unset DBUS_SESSION_BUS_ADDRESS' >> /root/.vnc/xstartup && \
-    echo 'export XAUTHORITY=/root/.Xauthority' >> /root/.vnc/xstartup && \
-    echo 'dbus-launch --exit-with-session startxfce4 &' >> /root/.vnc/xstartup && \
-    echo 'sleep 2' >> /root/.vnc/xstartup && \
-    echo 'opencpn &' >> /root/.vnc/xstartup && \
-    chmod +x /root/.vnc/xstartup
+# --- Copy startup scripts ---
+# Copy our clean xstartup (only starts XFCE, not OpenCPN)
+COPY xstartup /root/.vnc/xstartup
+RUN chmod +x /root/.vnc/xstartup
+
+# Copy run.sh (responsible for starting VNC + noVNC + OpenCPN)
+COPY run.sh /run.sh
+RUN chmod +x /run.sh
+
+# Copy start.sh (entrypoint script for HA add-on base)
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
 EXPOSE 5901
 EXPOSE 6080
 EXPOSE 10110/udp
 EXPOSE 10110/tcp
-
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
 
 ENTRYPOINT ["/start.sh"]
