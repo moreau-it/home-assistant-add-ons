@@ -1,7 +1,7 @@
 name: "OpenCPN"
 version: "latest"
 slug: "opencpn"
-description: "Marine navigation app OpenCPN running as a Home Assistant add-on with USB, VNC & noVNC"
+description: "Marine navigation app OpenCPN running as a Home Assistant add-on with USB, noVNC, and optional password authentication"
 url: "https://github.com/OpenCPN/OpenCPN"
 
 arch:
@@ -42,7 +42,19 @@ map:
 options:
   vnc_password: ""
   insecure_mode: false
+  vnc_resolution: "1280x800"
+  novnc_port: 6080
 
 schema:
-  vnc_password: password?
-  insecure_mode: bool
+  vnc_password:
+    type: password?
+    description: "Password for noVNC (empty disables authentication if insecure_mode=true)"
+  insecure_mode:
+    type: boolean
+    default: false
+  vnc_resolution:
+    type: string
+    default: "1280x800"
+  novnc_port:
+    type: integer
+    default: 6080
