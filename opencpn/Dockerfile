@@ -41,7 +41,7 @@ ENV NOVNC_PORT=6080
 ENV VNC_PORT=5901
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
-# Install runtime dependencies + fixes for XFCE + DBus
+# Install runtime dependencies + XFCE + DBus + VNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-goodies xfce4-terminal xfce4-session \
     tigervnc-standalone-server tigervnc-common tigervnc-tools \
@@ -56,22 +56,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy OpenCPN binaries
 COPY --from=builder /usr/local /usr/local
 
-# --- Copy startup scripts ---
-# Copy our clean xstartup (only starts XFCE, not OpenCPN)
-COPY xstartup /root/.vnc/xstartup
-RUN chmod +x /root/.vnc/xstartup
+# Configure VNC + XFCE startup (baked into image)
+RUN mkdir -p /root/.vnc && \
+    printf '%s\n' '#!/bin/sh' \
+    'unset SESSION_MANAGER' \
+    'unset DBUS_SESSION_BUS_ADDRESS' \
+    'export XAUTHORITY=/root/.Xauthority' \
+    'dbus-launch --exit-with-session startxfce4' \
+    > /root/.vnc/xstartup && \
+    chmod +x /root/.vnc/xstartup
 
-# Copy run.sh (responsible for starting VNC + noVNC + OpenCPN)
-COPY run.sh /run.sh
-RUN chmod +x /run.sh
-
-# Copy start.sh (entrypoint script for HA add-on base)
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
-
+# Expose VNC / noVNC / OpenCPN ports
 EXPOSE 5901
 EXPOSE 6080
 EXPOSE 10110/udp
 EXPOSE 10110/tcp
+
+# Copy startup script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
 ENTRYPOINT ["/start.sh"]
