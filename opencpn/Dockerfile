@@ -30,25 +30,41 @@ RUN mkdir -p build && cd build && \
     make install
 
 ########################################
-# Stage 2 — Runtime with VNC + noVNC
+# Stage 2 — Runtime with noVNC + Xvfb
 ########################################
 FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
-ENV VNC_RESOLUTION=1280x800
 ENV NOVNC_PORT=6080
 ENV VNC_PORT=5901
+ENV VNC_RESOLUTION=1280x800
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
-# Install runtime dependencies + XFCE + DBus + VNC + xterm
+# Install runtime dependencies + XFCE + Xvfb + noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-goodies xfce4-terminal xfce4-session xterm \
-    tigervnc-standalone-server tigervnc-common tigervnc-tools \
-    novnc websockify \
-    dbus-x11 gvfs gvfs-backends policykit-1 libpam-systemd \
-    x11-xserver-utils xauth jq \
-    libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
+    xvfb x11-xserver-utils xauth \
+    novnc websockify dbus-x11 gvfs gvfs-backends policykit-1 libpam-systemd \
+    jq libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
-    && rm -rf /var/
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy OpenCPN binaries
+COPY --from=builder /usr/local /usr/local
+
+# Copy xstartup
+COPY xstartup /root/.xstartup
+RUN chmod +x /root/.xstartup
+
+# Copy startup script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+# Expose ports
+EXPOSE 6080
+EXPOSE 10110/udp
+EXPOSE 10110/tcp
+
+ENTRYPOINT ["/start.sh"]
