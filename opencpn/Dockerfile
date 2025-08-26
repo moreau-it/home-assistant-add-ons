@@ -30,23 +30,22 @@ RUN mkdir -p build && cd build && \
     make install
 
 ########################################
-# Stage 2 — Runtime with noVNC + Xvfb
+# Stage 2 — Runtime with noVNC only
 ########################################
 FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
-ENV NOVNC_PORT=6080
-ENV VNC_PORT=5901
 ENV VNC_RESOLUTION=1280x800
+ENV NOVNC_PORT=6080
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
-# Install runtime dependencies + XFCE + Xvfb + noVNC
+# Install runtime dependencies + XFCE + DBus + noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    xfce4 xfce4-goodies xfce4-terminal xfce4-session xterm \
-    xvfb x11-xserver-utils xauth \
+    xfce4 xfce4-goodies xfce4-terminal xfce4-session \
+    xvfb x11-xserver-utils xauth jq \
     novnc websockify dbus-x11 gvfs gvfs-backends policykit-1 libpam-systemd \
-    jq libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libcurl4 \
+    libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
     && rm -rf /var/lib/apt/lists/*
@@ -54,17 +53,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy OpenCPN binaries
 COPY --from=builder /usr/local /usr/local
 
-# Copy xstartup
-COPY xstartup /root/.xstartup
-RUN chmod +x /root/.xstartup
+# Expose noVNC port and OpenCPN default port
+EXPOSE 6080
+EXPOSE 10110/udp
+EXPOSE 10110/tcp
 
 # Copy startup script
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
-
-# Expose ports
-EXPOSE 6080
-EXPOSE 10110/udp
-EXPOSE 10110/tcp
 
 ENTRYPOINT ["/start.sh"]
