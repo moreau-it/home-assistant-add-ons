@@ -44,7 +44,8 @@ ENV LD_LIBRARY_PATH=/usr/local/lib
 # Install runtime dependencies + fixes for XFCE + DBus
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-goodies xfce4-terminal xfce4-session \
-    tigervnc-standalone-server tigervnc-common novnc websockify \
+    tigervnc-standalone-server tigervnc-common tigervnc-tools \
+    novnc websockify \
     dbus-x11 gvfs gvfs-backends policykit-1 libpam-systemd \
     x11-xserver-utils xauth jq \
     libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
