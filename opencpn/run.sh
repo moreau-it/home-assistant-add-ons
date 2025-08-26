@@ -1,49 +1,20 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -e
 
-OPTIONS_FILE="/data/options.json"
-VNC_PASS=$(jq -r '.vnc_password' $OPTIONS_FILE)
-ALLOW_INSECURE=$(jq -r '.allow_insecure_vnc' $OPTIONS_FILE)
+# Set a VNC password non-interactively (not logged)
+echo "Setting VNC password..."
+mkdir -p /root/.vnc
+x11vnc -storepasswd "${VNC_PASSWORD:-opencpn}" /root/.vnc/passwd >/dev/null 2>&1
 
-echo "[OpenCPN] Starting add-on..."
+# Start VNC server
+tigervncserver ${DISPLAY} -geometry ${VNC_RESOLUTION} -SecurityTypes VncAuth -passwd /root/.vnc/passwd
 
-# Mask password in logs
-if [[ -n "$VNC_PASS" && "$VNC_PASS" != "null" ]]; then
-    echo "[OpenCPN] VNC Password: ******"
-else
-    echo "[OpenCPN] VNC Password: <not set>"
-fi
+# Start noVNC
+websockify --web=/usr/share/novnc ${NOVNC_PORT} localhost:${VNC_PORT} &
 
-echo "[OpenCPN] Insecure VNC: $ALLOW_INSECURE"
-
-# Prepare VNC
-mkdir -p ~/.vnc
-if [[ -n "$VNC_PASS" && "$VNC_PASS" != "null" ]]; then
-    echo "[OpenCPN] Configuring password-protected VNC..."
-    (echo "$VNC_PASS" && echo "$VNC_PASS") | vncpasswd -f > ~/.vnc/passwd
-    chmod 600 ~/.vnc/passwd
-    VNC_ARGS="-rfbauth ~/.vnc/passwd"
-elif [[ "$ALLOW_INSECURE" == "true" ]]; then
-    echo "[OpenCPN] Starting INSECURE VNC (no password!)"
-    VNC_ARGS="-SecurityTypes None --I-KNOW-THIS-IS-INSECURE"
-else
-    echo "[OpenCPN] ERROR: No VNC password set and insecure mode disabled!"
-    exit 1
-fi
-
-# Start TigerVNC (will run ~/.vnc/xstartup automatically)
-echo "[OpenCPN] Starting TigerVNC on :1"
-vncserver :1 -geometry ${VNC_RESOLUTION:-1280x800} -localhost no $VNC_ARGS
-
-# Start noVNC for browser access
-echo "[OpenCPN] Starting noVNC on port 6080"
-websockify --web=/usr/share/novnc/ 6080 localhost:5901 &
-
-# Launch OpenCPN (wait a bit so XFCE session is ready)
+# Launch OpenCPN after XFCE starts
 sleep 3
-echo "[OpenCPN] Launching OpenCPN..."
-export DISPLAY=:1
 opencpn &
 
-# Keep container alive
-tail -f /root/.vnc/*.log
+# Keep foreground
+tail -f /dev/null
