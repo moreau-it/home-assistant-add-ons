@@ -10,7 +10,7 @@ ENV VNC_RESOLUTION=1280x800
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake pkg-config gettext git wget curl ca-certificates unzip tar lsb-release \
-    libwxgtk3.2-dev libglu1-mesa-dev libsqlite3-dev libtinyxml2-dev libtinyxml-dev \
+    libwxgtk3.2-dev libwxgtk3.2-gtk3-dev libglu1-mesa-dev libsqlite3-dev libtinyxml2-dev libtinyxml-dev \
     libcurl4-openssl-dev libgtk-3-dev libglew-dev libarchive-dev libudev-dev libusb-1.0-0-dev \
     libpthread-stubs0-dev libssl-dev zlib1g-dev libbz2-dev libexpat1-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -41,38 +41,38 @@ ENV NOVNC_PORT=6080
 ENV VNC_PORT=5901
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
-# Install runtime dependencies + XFCE + DBus + VNC
+# Install runtime dependencies + fixes for XFCE + DBus
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-goodies xfce4-terminal xfce4-session \
     tigervnc-standalone-server tigervnc-common tigervnc-tools \
     novnc websockify \
     dbus-x11 gvfs gvfs-backends policykit-1 libpam-systemd \
     x11-xserver-utils xauth jq \
-    libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
+    libwxgtk3.2-gtk3-0v5 libglu1-mesa libsqlite3-0 libtinyxml2-9 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
+    && ldconfig \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy OpenCPN binaries
 COPY --from=builder /usr/local /usr/local
 
-# Configure VNC + XFCE startup (baked into image)
+# Setup clean xstartup (only starts XFCE + OpenCPN)
 RUN mkdir -p /root/.vnc && \
-    printf '%s\n' '#!/bin/sh' \
-    'unset SESSION_MANAGER' \
-    'unset DBUS_SESSION_BUS_ADDRESS' \
-    'export XAUTHORITY=/root/.Xauthority' \
-    'dbus-launch --exit-with-session startxfce4' \
-    > /root/.vnc/xstartup && \
+    echo '#!/bin/sh' > /root/.vnc/xstartup && \
+    echo 'unset SESSION_MANAGER' >> /root/.vnc/xstartup && \
+    echo 'unset DBUS_SESSION_BUS_ADDRESS' >> /root/.vnc/xstartup && \
+    echo 'export XAUTHORITY=/root/.Xauthority' >> /root/.vnc/xstartup && \
+    echo 'dbus-launch --exit-with-session startxfce4 &' >> /root/.vnc/xstartup && \
+    echo 'sleep 2' >> /root/.vnc/xstartup && \
+    echo 'opencpn &' >> /root/.vnc/xstartup && \
     chmod +x /root/.vnc/xstartup
 
-# Expose VNC / noVNC / OpenCPN ports
 EXPOSE 5901
 EXPOSE 6080
 EXPOSE 10110/udp
 EXPOSE 10110/tcp
 
-# Copy startup script
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
