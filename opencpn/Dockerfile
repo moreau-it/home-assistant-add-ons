@@ -5,21 +5,26 @@ FROM debian:bookworm-slim AS kasmvnc-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Step: Build KasmVNC with dependency logging
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake git pkg-config \
     libjpeg-dev libpng-dev libssl-dev \
     libx11-dev libxext-dev libxrender-dev libxrandr-dev libxtst-dev libxi-dev \
     xauth x11-xserver-utils \
     ca-certificates curl \
+    libfreetype6-dev libgnutls28-dev libpam0g-dev \
+    libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
+    libcpuid-dev libtbb-dev libxcursor-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 RUN git clone --depth=1 https://github.com/kasmtech/KasmVNC.git .
 
 RUN mkdir build && cd build && \
-    cmake .. && \
-    make -j$(nproc) && \
-    make install
+    echo "=== Starting CMake configuration with verbose logs ===" && \
+    cmake .. --trace-expand --debug-output -DCMAKE_VERBOSE_MAKEFILE=ON || true && \
+    echo "=== Missing dependencies from CMakeError.log ===" && \
+    cat CMakeFiles/CMakeError.log || true
 
 
 ########################################
