@@ -2,16 +2,11 @@
 set -e
 
 CONFIG_PATH=/data/options.json
-LOGFILE=/var/log/opencpn_addon.log
+TIMESTAMP="$(date +'%Y-%m-%d %H:%M:%S')"
 
-# Function to log with timestamp
-log() {
-    echo "################$(date '+%Y-%m-%d %H:%M:%S')#################"
-    echo "$1" | tee -a "$LOGFILE"
-}
-
-log "[INFO] Starting OpenCPN Home Assistant Add-on..."
-log "[DEBUG] Loading configuration from ${CONFIG_PATH}..."
+echo "${TIMESTAMP}"
+echo "[INFO] Starting OpenCPN Home Assistant Add-on..."
+echo "[DEBUG] Loading configuration from ${CONFIG_PATH}..."
 
 VNC_PASSWORD=$(jq -r '.vnc_password // empty' ${CONFIG_PATH})
 INSECURE_MODE=$(jq -r '.insecure_mode // false' ${CONFIG_PATH})
@@ -22,58 +17,57 @@ if [ -n "$VNC_PASSWORD" ] && [ "$VNC_PASSWORD" != "null" ]; then
 else
     MASKED_PASS=""
 fi
-
-log "[DEBUG] vnc_password='${MASKED_PASS}'"
-log "[DEBUG] insecure_mode='${INSECURE_MODE}'"
+echo "[DEBUG] vnc_password='${MASKED_PASS}'"
+echo "[DEBUG] insecure_mode='${INSECURE_MODE}'"
 
 # Start DBus
-log "[INFO] Starting DBus..."
+echo "[INFO] Starting DBus..."
 mkdir -p /var/run/dbus
 dbus-daemon --system --fork
 
-# Find kasmvncserver binary
-KASM_PATH=$(command -v kasmvncserver || true)
-if [ -n "$KASM_PATH" ]; then
-    log "[DEBUG] kasmvncserver binary location: $KASM_PATH"
-else
-    log "[ERROR] kasmvncserver not found in PATH!"
-    log "[DEBUG] /usr/local/bin contents:"
-    ls -l /usr/local/bin | tee -a "$LOGFILE"
+# Search for KasmVNC binaries
+echo "${TIMESTAMP}"
+echo "[DEBUG] Searching for KasmVNC binaries in /usr/local..."
+KASM_BIN=$(find / -type f -executable -print | grep -i kasmvnc || true)
+if [ -z "$KASM_BIN" ]; then
+    echo "[ERROR] KasmVNC binary not found! Please check build stage."
+    exit 1
 fi
+echo "[DEBUG] Found KasmVNC binary at: ${KASM_BIN}"
 
-# Configure KasmVNC
+# Configure KasmVNC command
 if [ "$INSECURE_MODE" = "true" ]; then
-    log "[INFO] Starting KasmVNC in INSECURE mode..."
-    KASM_CMD="kasmvncserver :1 -geometry ${VNC_RESOLUTION} -SecurityTypes None --I-KNOW-THIS-IS-INSECURE"
+    echo "[INFO] Starting KasmVNC in INSECURE mode..."
+    KASM_CMD="${KASM_BIN} :1 -geometry ${VNC_RESOLUTION} -SecurityTypes None --I-KNOW-THIS-IS-INSECURE"
 else
     if [ -z "$VNC_PASSWORD" ] || [ "$VNC_PASSWORD" = "null" ]; then
-        log "[ERROR] VNC password not set! Either enable insecure mode or provide a password."
+        echo "[ERROR] VNC password not set! Either enable insecure mode or provide a password."
         exit 1
     fi
-    log "[INFO] Setting KasmVNC password..."
+    echo "[INFO] Setting KasmVNC password..."
     mkdir -p /root/.vnc
     (echo "$VNC_PASSWORD" && echo "$VNC_PASSWORD") | vncpasswd -f > /root/.vnc/passwd
     chmod 600 /root/.vnc/passwd
-    KASM_CMD="kasmvncserver :1 -geometry ${VNC_RESOLUTION} -rfbauth /root/.vnc/passwd"
+    KASM_CMD="${KASM_BIN} :1 -geometry ${VNC_RESOLUTION} -rfbauth /root/.vnc/passwd"
 fi
 
 # Start KasmVNC
-log "[INFO] Starting KasmVNC server on display :1..."
+echo "[INFO] Starting KasmVNC server on display :1..."
 eval $KASM_CMD
 
 # Start noVNC
-log "[INFO] Starting noVNC on port ${NOVNC_PORT}..."
+echo "[INFO] Starting noVNC on port ${NOVNC_PORT}..."
 websockify --web=/usr/share/novnc/ ${NOVNC_PORT} localhost:${VNC_PORT} &
 
 # Start XFCE
-log "[INFO] Launching XFCE desktop environment..."
+echo "[INFO] Launching XFCE desktop environment..."
 export DISPLAY=:1
 startxfce4 &
 
 # Wait a bit before OpenCPN
 sleep 3
-log "[INFO] Launching OpenCPN..."
+echo "[INFO] Launching OpenCPN..."
 opencpn &
 
-log "[INFO] OpenCPN with KasmVNC & noVNC is now running!"
+echo "[INFO] OpenCPN with KasmVNC & noVNC is now running!"
 tail -F /root/.vnc/*.log
