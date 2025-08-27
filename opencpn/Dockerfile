@@ -5,17 +5,26 @@ FROM debian:bookworm-slim AS kasmvnc-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install build dependencies
+# Install all required dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake git pkg-config \
     libjpeg-dev libpng-dev libssl-dev \
     libx11-dev libxext-dev libxrender-dev libxrandr-dev libxtst-dev libxi-dev \
-    xauth x11-xserver-utils ca-certificates curl \
+    xauth x11-xserver-utils \
+    ca-certificates curl \
     libfreetype6-dev libgnutls28-dev libpam0g-dev \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
     libcpuid-dev libtbb-dev libxcursor-dev \
-    libwebp-dev libturbojpeg-dev \
-    && rm -rf /var/lib/apt/lists/*
+    libwebp-dev libturbojpeg0-dev zlib1g-dev \
+    libx264-164 libx265-199 libxvidcore4 libtwolame0 \
+    libvorbis0a libvorbisenc2 libvorbisfile3 libvpx7 \
+    libtheora0 libtiff6 libxml2 libxmu6 libxmuu1 libxpm4 \
+    libxt6 libxaw7 libxmu-dev libxrandr-dev libxrender-dev libxxf86vm1 \
+    linux-libc-dev make nettle-dev ocl-icd-libopencl1 openssl patch perl \
+    perl-modules-5.36 pkg-config pkgconf pkgconf-bin procps rpcsvc-proto \
+    shared-mime-info x11-common x11-xserver-utils x11proto-dev xorg-sgml-doctools \
+    xtrans-dev xz-utils \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 RUN git clone --depth=1 https://github.com/kasmtech/KasmVNC.git .
