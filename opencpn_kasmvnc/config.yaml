@@ -1,0 +1,48 @@
+name: "OpenCPN"
+version: "latest"
+slug: "opencpn"
+description: "Marine navigation app OpenCPN running as a Home Assistant add-on with USB & KasmVNC"
+url: "https://github.com/OpenCPN/OpenCPN"
+
+arch:
+  - aarch64
+  - armv7
+  - armhf
+  - amd64
+  - i386
+
+startup: services
+boot: auto
+init: false
+
+webui: "http://[HOST]:[PORT:6901]/"
+
+ports:
+  6901/tcp: 6901
+
+devices:
+  - /dev/ttyAMA0
+  - /dev/ttyUSB0
+  - /dev/hidraw0
+  - /dev/hidraw1
+
+udev: true
+stdin: true
+tty: true
+
+privileged:
+  - SYS_ADMIN
+  - NET_ADMIN
+  - SYS_RAWIO
+
+map:
+  - share:rw
+  - config:rw
+
+options:
+  vnc_password: ""
+  insecure_mode: false
+
+schema:
+  vnc_password: password?
+  insecure_mode: bool
