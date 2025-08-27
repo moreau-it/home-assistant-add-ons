@@ -1,7 +1,7 @@
 name: "OpenCPN"
 version: "latest"
 slug: "opencpn"
-description: "Marine navigation app OpenCPN running as a Home Assistant add-on with USB & KasmVNC"
+description: "Marine navigation app OpenCPN running as a Home Assistant add-on with USB, KasmVNC & noVNC"
 url: "https://github.com/OpenCPN/OpenCPN"
 
 arch:
@@ -15,10 +15,11 @@ startup: services
 boot: auto
 init: false
 
-webui: "http://[HOST]:[PORT:6901]/"
+webui: "[PROTO:tcp]://[HOST]:[PORT:6080]/"
 
 ports:
-  6901/tcp: 6901
+  6080/tcp: 6080
+  5901/tcp: 5901
 
 devices:
   - /dev/ttyAMA0
