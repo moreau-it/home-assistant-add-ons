@@ -4,8 +4,6 @@
 FROM debian:bookworm-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV DISPLAY=:1
-ENV VNC_RESOLUTION=1280x800
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -30,48 +28,37 @@ RUN mkdir -p build && cd build && \
     make install
 
 ########################################
-# Stage 2 — Runtime with VNC + noVNC
+# Stage 2 — Runtime with KasmVNC
 ########################################
 FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
 ENV VNC_RESOLUTION=1280x800
-ENV NOVNC_PORT=6080
-ENV VNC_PORT=5901
+ENV VNC_PORT=6901
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
-# Install runtime dependencies + fixes for XFCE + DBus
+# Install runtime dependencies + XFCE + KasmVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-goodies xfce4-terminal xfce4-session \
-    tigervnc-standalone-server tigervnc-common tigervnc-tools \
-    novnc websockify \
     dbus-x11 gvfs gvfs-backends policykit-1 libpam-systemd \
     x11-xserver-utils xauth jq \
-    libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
+    libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
+    curl gnupg \
     && rm -rf /var/lib/apt/lists/*
+
+# Install KasmVNC
+RUN curl -fsSL https://kasmvnc.com/install.sh | bash
 
 # Copy OpenCPN binaries
 COPY --from=builder /usr/local /usr/local
 
-# Configure VNC + XFCE startup
-RUN mkdir -p /root/.vnc && \
-    echo '#!/bin/sh' > /root/.vnc/xstartup && \
-    echo 'unset SESSION_MANAGER' >> /root/.vnc/xstartup && \
-    echo 'unset DBUS_SESSION_BUS_ADDRESS' >> /root/.vnc/xstartup && \
-    echo 'export XAUTHORITY=/root/.Xauthority' >> /root/.vnc/xstartup && \
-    echo 'dbus-launch --exit-with-session startxfce4 &' >> /root/.vnc/xstartup && \
-    echo 'sleep 2' >> /root/.vnc/xstartup && \
-    echo 'opencpn &' >> /root/.vnc/xstartup && \
-    chmod +x /root/.vnc/xstartup
+# Expose only KasmVNC web port
+EXPOSE 6901
 
-EXPOSE 5901
-EXPOSE 6080
-EXPOSE 10110/udp
-EXPOSE 10110/tcp
-
+# Copy startup script
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
