@@ -19,15 +19,15 @@ fi
 echo "[DEBUG] vnc_password='${MASKED_PASS}'"
 echo "[DEBUG] insecure_mode='${INSECURE_MODE}'"
 
-# Prepare XFCE and DBus
+# Start DBus
 echo "[INFO] Starting DBus..."
 mkdir -p /var/run/dbus
 dbus-daemon --system --fork
 
-# Configure password for KasmVNC
+# Configure KasmVNC
 if [ "$INSECURE_MODE" = "true" ]; then
-    echo "[INFO] Starting KasmVNC in INSECURE mode (no password)..."
-    kasmvncserver --geometry ${VNC_RESOLUTION} --localhost no --vnc :1 --skip-auth
+    echo "[INFO] Starting KasmVNC in INSECURE mode..."
+    KASM_CMD="kasmvncserver :1 -geometry ${VNC_RESOLUTION} -SecurityTypes None --I-KNOW-THIS-IS-INSECURE"
 else
     if [ -z "$VNC_PASSWORD" ] || [ "$VNC_PASSWORD" = "null" ]; then
         echo "[ERROR] VNC password not set! Either enable insecure mode or provide a password."
@@ -35,22 +35,28 @@ else
     fi
     echo "[INFO] Setting KasmVNC password..."
     mkdir -p /root/.vnc
-    echo "$VNC_PASSWORD" > /root/.vnc/passwd
+    (echo "$VNC_PASSWORD" && echo "$VNC_PASSWORD") | vncpasswd -f > /root/.vnc/passwd
     chmod 600 /root/.vnc/passwd
-    kasmvncserver --geometry ${VNC_RESOLUTION} --vnc :1 --passwd /root/.vnc/passwd
+    KASM_CMD="kasmvncserver :1 -geometry ${VNC_RESOLUTION} -rfbauth /root/.vnc/passwd"
 fi
 
+# Start KasmVNC
+echo "[INFO] Starting KasmVNC server on display :1..."
+eval $KASM_CMD
+
+# Start noVNC
+echo "[INFO] Starting noVNC on port ${NOVNC_PORT}..."
+websockify --web=/usr/share/novnc/ ${NOVNC_PORT} localhost:${VNC_PORT} &
+
 # Start XFCE
-echo "[INFO] Launching XFCE desktop..."
+echo "[INFO] Launching XFCE desktop environment..."
 export DISPLAY=:1
-dbus-launch --exit-with-session startxfce4 &
+startxfce4 &
 
-# Wait a bit
+# Wait a bit before OpenCPN
 sleep 3
-
-# Launch OpenCPN
 echo "[INFO] Launching OpenCPN..."
 opencpn &
 
-echo "[INFO] OpenCPN with KasmVNC is now running at http://<host>:6901/"
-tail -f /root/.vnc/*.log
+echo "[INFO] OpenCPN with KasmVNC & noVNC is now running!"
+tail -F /root/.vnc/*.log
