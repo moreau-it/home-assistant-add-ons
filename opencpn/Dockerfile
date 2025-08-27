@@ -5,27 +5,31 @@ FROM debian:bookworm-slim AS kasmvnc-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Step: Build KasmVNC with dependency logging
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake git pkg-config \
     libjpeg-dev libpng-dev libssl-dev \
     libx11-dev libxext-dev libxrender-dev libxrandr-dev libxtst-dev libxi-dev \
-    xauth x11-xserver-utils \
-    ca-certificates curl \
+    xauth x11-xserver-utils ca-certificates curl \
     libfreetype6-dev libgnutls28-dev libpam0g-dev \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
     libcpuid-dev libtbb-dev libxcursor-dev \
+    libwebp-dev libturbojpeg-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 RUN git clone --depth=1 https://github.com/kasmtech/KasmVNC.git .
 
+# Build KasmVNC with dependency logging
 RUN mkdir build && cd build && \
     echo "=== Starting CMake configuration with verbose logs ===" && \
     cmake .. --trace-expand --debug-output -DCMAKE_VERBOSE_MAKEFILE=ON || true && \
     echo "=== Missing dependencies from CMakeError.log ===" && \
-    cat CMakeFiles/CMakeError.log || true
+    cat CMakeFiles/CMakeError.log || true && \
+    make -j$(nproc) && make install
 
+# Clean up build artifacts
+RUN rm -rf /src /build
 
 ########################################
 # Stage 2 — Build OpenCPN
@@ -35,6 +39,7 @@ FROM debian:bookworm-slim AS opencpn-builder
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /src
 
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake pkg-config gettext git wget curl ca-certificates unzip tar lsb-release \
     libwxgtk3.2-dev libglu1-mesa-dev libsqlite3-dev libtinyxml2-dev libtinyxml-dev \
@@ -52,9 +57,10 @@ RUN mkdir build && cd build && \
       -DOCPN_ENABLE_GARMINHOST=ON \
       -DCMAKE_C_FLAGS="-fPIC -pthread" \
       -DCMAKE_CXX_FLAGS="-fPIC -pthread" && \
-    make -j$(nproc) && \
-    make install
+    make -j$(nproc) && make install
 
+# Clean up build artifacts
+RUN rm -rf /src /build
 
 ########################################
 # Stage 3 — Runtime
@@ -77,17 +83,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
     novnc websockify \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && ldconfig
 
 # Copy in KasmVNC and OpenCPN from build stages
 COPY --from=kasmvnc-builder /usr/local /usr/local
 COPY --from=opencpn-builder /usr/local /usr/local
 
 # Expose ports
-EXPOSE 5901
-EXPOSE 6080
-EXPOSE 10110/udp
-EXPOSE 10110/tcp
+EXPOSE 5901 6080 10110/udp 10110/tcp
 
 # Copy startup script
 COPY start.sh /start.sh
