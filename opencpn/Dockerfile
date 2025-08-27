@@ -1,11 +1,10 @@
 ########################################
 # Stage 1 — Build OpenCPN
 ########################################
-FROM debian:bookworm-slim AS builder
+FROM debian:bookworm-slim AS opencpn-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake pkg-config gettext git wget curl ca-certificates unzip tar lsb-release \
     libwxgtk3.2-dev libglu1-mesa-dev libsqlite3-dev libtinyxml2-dev libtinyxml-dev \
@@ -27,39 +26,70 @@ RUN mkdir -p build && cd build && \
     make -j$(nproc) && \
     make install
 
+
 ########################################
-# Stage 2 — Runtime with KasmVNC
+# Stage 2 — Build KasmVNC
+########################################
+FROM debian:bookworm-slim AS kasmvnc-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake git pkg-config \
+    libjpeg-dev libpng-dev libssl-dev \
+    libx11-dev libxext-dev libxrender-dev libxrandr-dev \
+    libxtst-dev libxi-dev xauth x11-xserver-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+RUN git clone --depth=1 https://github.com/kasmtech/KasmVNC.git .
+
+RUN mkdir build && cd build && cmake .. && make -j$(nproc) && make install
+
+
+########################################
+# Stage 3 — Runtime
 ########################################
 FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
 ENV VNC_RESOLUTION=1280x800
-ENV VNC_PORT=6901
+ENV NOVNC_PORT=6080
+ENV VNC_PORT=5901
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
-# Install runtime dependencies + XFCE + KasmVNC
+# Runtime deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-goodies xfce4-terminal xfce4-session \
     dbus-x11 gvfs gvfs-backends policykit-1 libpam-systemd \
     x11-xserver-utils xauth jq \
-    libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libcurl4 \
-    libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
-    zlib1g libbz2-1.0 libexpat1 \
-    curl gnupg \
+    libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 \
+    libcurl4 libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 \
+    libssl3 zlib1g libbz2-1.0 libexpat1 \
+    novnc websockify \
     && rm -rf /var/lib/apt/lists/*
 
-# Install KasmVNC
-RUN curl -fsSL https://kasmvnc.com/install.sh | bash
+# Copy OpenCPN + KasmVNC builds
+COPY --from=opencpn-builder /usr/local /usr/local
+COPY --from=kasmvnc-builder /usr/local /usr/local
 
-# Copy OpenCPN binaries
-COPY --from=builder /usr/local /usr/local
-
-# Expose only KasmVNC web port
-EXPOSE 6901
+# Setup default xstartup for XFCE
+RUN mkdir -p /root/.vnc && \
+    printf '%s\n' '#!/bin/sh' \
+    'unset SESSION_MANAGER' \
+    'unset DBUS_SESSION_BUS_ADDRESS' \
+    'exec startxfce4' \
+    > /root/.vnc/xstartup && \
+    chmod +x /root/.vnc/xstartup
 
 # Copy startup script
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
+
+EXPOSE 5901
+EXPOSE 6080
+EXPOSE 10110/udp
+EXPOSE 10110/tcp
 
 ENTRYPOINT ["/start.sh"]
