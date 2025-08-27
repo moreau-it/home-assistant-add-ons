@@ -95,6 +95,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
     novnc websockify \
+    perl libswitch-perl \
     && rm -rf /var/lib/apt/lists/* \
     && ldconfig
 
