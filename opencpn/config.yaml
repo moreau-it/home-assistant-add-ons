@@ -1,6 +1,6 @@
-name: "OpenCPN + KasmVNC"
+name: "OpenCPN"
 version: "latest"
-slug: "opencpnkasmvnc"
+slug: "opencpn"
 description: "Marine navigation app OpenCPN running as a Home Assistant add-on with USB & KasmVNC"
 url: "https://github.com/OpenCPN/OpenCPN"
 
