@@ -28,7 +28,7 @@ dbus-daemon --system --fork
 
 # Locate the actual kasmvncserver binary
 log "[DEBUG] Searching for KasmVNC server binary..."
-KASM_SERVER_BIN=$(find /usr/local/bin -type f -executable -name kasmvncserver || true)
+KASM_SERVER_BIN=$(find / -type f -executable -name kasmvncserver || true)
 if [ -z "$KASM_SERVER_BIN" ]; then
     log "[ERROR] kasmvncserver not found! Check your build stage."
     exit 1
