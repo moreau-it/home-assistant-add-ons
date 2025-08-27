@@ -26,6 +26,16 @@ log "[INFO] Starting DBus..."
 mkdir -p /var/run/dbus
 dbus-daemon --system --fork
 
+# Locate the actual kasmvncserver binary
+log "[DEBUG] Searching for KasmVNC server binary..."
+KASM_SERVER_BIN=$(find /usr/local/bin -type f -executable -name kasmvncserver || true)
+if [ -z "$KASM_SERVER_BIN" ]; then
+    log "[ERROR] kasmvncserver not found! Check your build stage."
+    exit 1
+fi
+log "[DEBUG] Found KasmVNC server binary at: $KASM_SERVER_BIN"
+
+
 # Check if kasmvncserver exists in PATH
 if ! command -v kasmvncserver >/dev/null 2>&1; then
     log "[ERROR] kasmvncserver not found in PATH!"
