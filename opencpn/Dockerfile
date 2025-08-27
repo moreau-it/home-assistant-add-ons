@@ -71,6 +71,7 @@ RUN mkdir build && cd build && \
 # Clean up build artifacts
 RUN rm -rf /src /build
 
+
 ########################################
 # Stage 3 — Runtime
 ########################################
@@ -82,6 +83,8 @@ ENV VNC_RESOLUTION=1280x800
 ENV NOVNC_PORT=6080
 ENV VNC_PORT=5901
 ENV LD_LIBRARY_PATH=/usr/local/lib
+# Add /usr/local/bin and /usr/local/sbin to PATH
+ENV PATH="/usr/local/bin:/usr/local/sbin:${PATH}"
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
