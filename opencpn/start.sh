@@ -6,7 +6,6 @@ CONFIG_PATH=/data/options.json
 echo "[INFO] Starting OpenCPN Home Assistant Add-on..."
 echo "[DEBUG] Loading configuration from ${CONFIG_PATH}..."
 
-# Read configuration from options.json
 VNC_PASSWORD=$(jq -r '.vnc_password // empty' ${CONFIG_PATH})
 INSECURE_MODE=$(jq -r '.insecure_mode // false' ${CONFIG_PATH})
 
@@ -20,58 +19,38 @@ fi
 echo "[DEBUG] vnc_password='${MASKED_PASS}'"
 echo "[DEBUG] insecure_mode='${INSECURE_MODE}'"
 
-# Prepare VNC environment
-mkdir -p /root/.vnc
-export XAUTHORITY=/root/.Xauthority
-
-# Always create a fresh Xauthority file to avoid race conditions
-if [ ! -f "$XAUTHORITY" ]; then
-    echo "[INFO] Creating new Xauthority file..."
-    touch "$XAUTHORITY"
-fi
-
-# Start DBus service for XFCE and VNC session
+# Prepare XFCE and DBus
 echo "[INFO] Starting DBus..."
 mkdir -p /var/run/dbus
 dbus-daemon --system --fork
 
-# Configure VNC security options
+# Configure password for KasmVNC
 if [ "$INSECURE_MODE" = "true" ]; then
-    echo "[INFO] Starting VNC in INSECURE mode (no authentication)..."
-    VNC_CMD="vncserver :1 -geometry ${VNC_RESOLUTION} -localhost no -SecurityTypes None --I-KNOW-THIS-IS-INSECURE"
+    echo "[INFO] Starting KasmVNC in INSECURE mode (no password)..."
+    kasmvncserver --geometry ${VNC_RESOLUTION} --localhost no --vnc :1 --skip-auth
 else
     if [ -z "$VNC_PASSWORD" ] || [ "$VNC_PASSWORD" = "null" ]; then
         echo "[ERROR] VNC password not set! Either enable insecure mode or provide a password."
         exit 1
     fi
-    echo "[INFO] Setting VNC password..."
+    echo "[INFO] Setting KasmVNC password..."
     mkdir -p /root/.vnc
-    # Create password file non-interactively (no echo to logs)
-    (echo "$VNC_PASSWORD" && echo "$VNC_PASSWORD") | vncpasswd -f > /root/.vnc/passwd
+    echo "$VNC_PASSWORD" > /root/.vnc/passwd
     chmod 600 /root/.vnc/passwd
-    echo "[INFO] Starting VNC with PASSWORD authentication..."
-    VNC_CMD="vncserver :1 -geometry ${VNC_RESOLUTION} -localhost no -rfbauth /root/.vnc/passwd"
+    kasmvncserver --geometry ${VNC_RESOLUTION} --vnc :1 --passwd /root/.vnc/passwd
 fi
 
-# Start TigerVNC server
-echo "[INFO] Starting TigerVNC server on display :1..."
-eval $VNC_CMD
-
-# Start noVNC in background
-echo "[INFO] Starting noVNC on port ${NOVNC_PORT}..."
-websockify --web=/usr/share/novnc/ ${NOVNC_PORT} localhost:${VNC_PORT} &
-
-# Start XFCE session cleanly
-echo "[INFO] Launching XFCE desktop environment..."
+# Start XFCE
+echo "[INFO] Launching XFCE desktop..."
 export DISPLAY=:1
 dbus-launch --exit-with-session startxfce4 &
 
-# Delay to allow XFCE to fully start
+# Wait a bit
 sleep 3
 
-# Start OpenCPN
+# Launch OpenCPN
 echo "[INFO] Launching OpenCPN..."
 opencpn &
 
-echo "[INFO] OpenCPN with VNC & noVNC is now running!"
-tail -F /root/.vnc/*.log
+echo "[INFO] OpenCPN with KasmVNC is now running at http://<host>:6901/"
+tail -f /root/.vnc/*.log
