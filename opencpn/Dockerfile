@@ -14,8 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpthread-stubs0-dev libssl-dev zlib1g-dev libbz2-dev libexpat1-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Clone OpenCPN source
 RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git .
 
+# Build OpenCPN
 RUN mkdir build && cd build && \
     cmake .. \
       -DCMAKE_BUILD_TYPE=Release \
@@ -26,8 +28,8 @@ RUN mkdir build && cd build && \
       -DCMAKE_CXX_FLAGS="-fPIC -pthread" && \
     make -j$(nproc) && make install
 
+# Clean up build artifacts
 RUN rm -rf /src /build
-
 
 ########################################
 # Stage 2 — Runtime
@@ -37,7 +39,6 @@ FROM debian:bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
 ENV VNC_RESOLUTION=1280x800
-ENV NOVNC_PORT=6080
 ENV VNC_PORT=5901
 ENV LD_LIBRARY_PATH=/usr/local/lib
 ENV PATH="/usr/local/bin:/usr/local/sbin:${PATH}"
@@ -50,22 +51,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
-    novnc websockify \
-    perl \
+    perl libswitch-perl curl \
     && rm -rf /var/lib/apt/lists/* \
     && ldconfig
 
-# Install KasmVNC from .deb (works on amd64 + arm64)
+# Install KasmVNC from .deb (multi-arch)
 RUN ARCH=$(dpkg --print-architecture) && \
     curl -L -o /tmp/kasmvnc.deb https://github.com/kasmtech/KasmVNC/releases/latest/download/kasmvnc-${ARCH}.deb && \
     apt-get update && apt-get install -y /tmp/kasmvnc.deb && \
     rm -rf /var/lib/apt/lists/* /tmp/kasmvnc.deb
 
-# Copy OpenCPN from builder
+# Copy OpenCPN from build stage
 COPY --from=opencpn-builder /usr/local /usr/local
 
-# Expose ports
-EXPOSE 5901 6080 10110/udp 10110/tcp
+# Expose VNC port
+EXPOSE 5901
+EXPOSE 10110/udp 10110/tcp
 
 # Copy startup script
 COPY start.sh /start.sh
