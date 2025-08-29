@@ -9,8 +9,9 @@ CONFIG_PATH="/data/options.json"
 DISPLAY="${DISPLAY:-:1}"
 VNC_RESOLUTION="${VNC_RESOLUTION:-1280x800}"
 
-# We’ll serve HTTP on 6080 (matches your add-on config/webui)
-KASMVNC_PORT="${NOVNC_PORT:-6080}"
+# Serve on this port. Both HTTP and HTTPS will work here when require_ssl=false.
+# Use KASMVNC_PORT env to override, or NOVNC_PORT for backward-compat.
+KASMVNC_PORT="${KASMVNC_PORT:-${NOVNC_PORT:-6080}}"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
 
@@ -34,7 +35,7 @@ INSECURE_MODE="$(echo "$INSECURE_MODE_RAW" | tr '[:upper:]' '[:lower:]')"
 MASKED=""; [[ -n "${VNC_PASSWORD:-}" ]] && MASKED="******"
 log "[DEBUG] display='${DISPLAY}', resolution='${VNC_RESOLUTION}'"
 log "[DEBUG] insecure_mode='${INSECURE_MODE}', vnc_password='${MASKED}'"
-log "[DEBUG] kasmvnc_http_port='${KASMVNC_PORT}'"
+log "[DEBUG] kasmvnc_port='${KASMVNC_PORT}' (HTTP and HTTPS)"
 
 # ---------- Sanity checks ----------
 command -v kasmvncserver >/dev/null 2>&1 || { log "[ERROR] kasmvncserver not found"; exit 1; }
@@ -59,7 +60,10 @@ log "[INFO] Setting KasmVNC password for user 'root'..."
 printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root /root/.kasmpasswd
 chmod 600 /root/.kasmpasswd || true
 
-# ---------- KasmVNC server config (HTTP on 6080) ----------
+# ---------- KasmVNC server config ----------
+# Docs: network.protocol=http|vnc, websocket_port (auto=8443+DISPLAY), ssl.require_ssl (default true).
+# We set protocol=http, pick our port, and set require_ssl=false so BOTH HTTP and HTTPS work on that port.
+# On Debian, default "system" cert is used for TLS (snake-oil) unless you provide your own. 
 mkdir -p /etc/kasmvnc
 cat >/etc/kasmvnc/kasmvnc.yaml <<EOF
 network:
@@ -71,22 +75,25 @@ network:
 EOF
 
 # ---------- Start KasmVNC ----------
-log "[INFO] Starting KasmVNC on display '${DISPLAY}' (HTTP :${KASMVNC_PORT})..."
+log "[INFO] Starting KasmVNC on display '${DISPLAY}' (HTTP+HTTPS :${KASMVNC_PORT})..."
 kasmvncserver --kill "${DISPLAY}" >/dev/null 2>&1 || true
 kasmvncserver ":${DISPLAY#:}" -geometry "${VNC_RESOLUTION}"
 
-# ---------- Verify listener (up to 10s) ----------
-for i in {1..10}; do
-  if curl -sI "http://127.0.0.1:${KASMVNC_PORT}/" >/dev/null 2>&1; then
-    log "[INFO] KasmVNC is listening on http://127.0.0.1:${KASMVNC_PORT}/"
-    break
-  fi
+# ---------- Verify listeners (up to 12s) ----------
+ok_http=false
+ok_https=false
+for i in {1..12}; do
+  curl -sI "http://127.0.0.1:${KASMVNC_PORT}/" >/dev/null 2>&1 && ok_http=true || true
+  curl -skI "https://127.0.0.1:${KASMVNC_PORT}/" >/dev/null 2>&1 && ok_https=true || true
+  if $ok_http || $ok_https; then break; fi
   sleep 1
-  [[ $i -eq 10 ]] && { 
-    log "[ERROR] KasmVNC did not open port ${KASMVNC_PORT}"; 
-    tail -n +1 ~/.vnc/*.log 2>/dev/null || true
-  }
 done
+$ok_http  && log "[INFO] HTTP listening at  http://127.0.0.1:${KASMVNC_PORT}/"
+$ok_https && log "[INFO] HTTPS listening at https://127.0.0.1:${KASMVNC_PORT}/"
+if ! $ok_http && ! $ok_https; then
+  log "[ERROR] KasmVNC did not open port ${KASMVNC_PORT}"; 
+  ss -ltnp 2>/dev/null | awk 'NR==1 || /kasmvnc/' || true
+fi
 
 # ---------- Desktop session ----------
 export DISPLAY
@@ -103,7 +110,7 @@ else
 fi
 
 # ---------- Ready ----------
-log "[INFO] Ready. Open your browser to: http://[HOST]:${KASMVNC_PORT}/"
+log "[INFO] Ready. Open your browser to: http://[HOST]:${KASMVNC_PORT}/  or  https://[HOST]:${KASMVNC_PORT}/"
 log "[INFO] Username: root  (password from options.json / env)"
 
 # Keep container in foreground
