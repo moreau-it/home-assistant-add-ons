@@ -1,8 +1,8 @@
 name: "OpenCPN"
 version: "latest"
 slug: "opencpn"
-description: "Marine navigation app OpenCPN running as a Home Assistant add-on with USB, KasmVNC & noVNC"
-url: "https://github.com/OpenCPN/OpenCPN"
+description: "Marine navigation app OpenCPN running as a Home Assistant add-on with KasmVNC"
+url: "https://github.com/moreau-it/home-assistant-add-ons"
 
 arch:
   - aarch64
@@ -13,9 +13,11 @@ boot: auto
 init: false
 
 ports:
-  6080/tcp: 6080
+  "6080/tcp": 6080
+ports_description:
+  "6080/tcp": "KasmVNC web (HTTP & HTTPS)"
 
-webui: "[PROTO:tcp]://[HOST]:[PORT:6080]/"
+webui: "http://[HOST]:[PORT:6080]/"
 
 devices:
   - /dev/ttyAMA0
@@ -37,7 +39,7 @@ map:
   - config:rw
 
 options:
-  vnc_password: ""
+  vnc_password: "ChangeMe123"   # ≥ 6 chars; used for KasmVNC Basic Auth (user: root)
   insecure_mode: false
 
 schema:
