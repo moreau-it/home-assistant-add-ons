@@ -1,67 +1,75 @@
-#!/bin/bash
-set -e
+########################################
+# Stage 1 — Build OpenCPN
+########################################
+FROM debian:bookworm-slim AS opencpn-builder
 
-# Add /usr/local/bin to PATH
-export PATH=/usr/local/bin:$PATH
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /src
 
-CONFIG_PATH=/data/options.json
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake pkg-config gettext git wget curl ca-certificates unzip tar lsb-release \
+    libwxgtk3.2-dev libglu1-mesa-dev libsqlite3-dev libtinyxml2-dev libtinyxml-dev \
+    libcurl4-openssl-dev libgtk-3-dev libglew-dev libarchive-dev libudev-dev libusb-1.0-0-dev \
+    libpthread-stubs0-dev libssl-dev zlib1g-dev libbz2-dev libexpat1-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-log() { echo "$(date '+%Y-%m-%d %H:%M:%S')$*"; }
+# Clone OpenCPN source
+RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git .
 
-log "[INFO] Starting OpenCPN Home Assistant Add-on..."
-log "[DEBUG] Loading configuration from ${CONFIG_PATH}..."
+# Build OpenCPN
+RUN mkdir build && cd build && \
+    cmake .. \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DOCPN_BUNDLE_TCDATA=ON \
+      -DOCPN_FORCE_GTK3=ON \
+      -DOCPN_ENABLE_GARMINHOST=ON \
+      -DCMAKE_C_FLAGS="-fPIC -pthread" \
+      -DCMAKE_CXX_FLAGS="-fPIC -pthread" && \
+    make -j$(nproc) && make install
 
-VNC_PASSWORD=$(jq -r '.vnc_password // empty' "${CONFIG_PATH}")
-INSECURE_MODE=$(jq -r '.insecure_mode // false' "${CONFIG_PATH}")
+# Clean up build artifacts
+RUN rm -rf /src /build
 
-MASKED_PASS=""
-if [ -n "$VNC_PASSWORD" ] && [ "$VNC_PASSWORD" != "null" ]; then
-    MASKED_PASS="******"
-fi
-log "[DEBUG] vnc_password='${MASKED_PASS}'"
-log "[DEBUG] insecure_mode='${INSECURE_MODE}'"
+########################################
+# Stage 2 — Runtime
+########################################
+FROM debian:bookworm-slim
 
-# Start DBus
-log "[INFO] Starting DBus..."
-mkdir -p /var/run/dbus
-dbus-daemon --system --fork
+ENV DEBIAN_FRONTEND=noninteractive
+ENV DISPLAY=:1
+ENV VNC_RESOLUTION=1280x800
+ENV VNC_PORT=5901
+ENV LD_LIBRARY_PATH=/usr/local/lib
+ENV PATH="/usr/local/bin:/usr/local/sbin:${PATH}"
 
-# Check if KasmVNC exists
-if ! command -v kasmvncserver >/dev/null 2>&1; then
-    log "[ERROR] 'kasmvncserver' not found in PATH!"
-    exit 1
-fi
-log "[DEBUG] Found KasmVNC at: $(command -v kasmvncserver)"
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xfce4 xfce4-goodies xfce4-terminal xfce4-session \
+    dbus-x11 gvfs gvfs-backends policykit-1 libpam-systemd \
+    x11-xserver-utils xauth jq \
+    libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
+    libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
+    zlib1g libbz2-1.0 libexpat1 \
+    perl libswitch-perl curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && ldconfig
 
-# Configure KasmVNC command
-if [ "$INSECURE_MODE" = "true" ]; then
-    log "[INFO] Starting KasmVNC in INSECURE mode..."
-    KASM_CMD="kasmvncserver :1 -geometry ${VNC_RESOLUTION} -SecurityTypes None --I-KNOW-THIS-IS-INSECURE"
-else
-    if [ -z "$VNC_PASSWORD" ] || [ "$VNC_PASSWORD" = "null" ]; then
-        log "[ERROR] VNC password not set! Either enable insecure mode or provide a password."
-        exit 1
-    fi
-    log "[INFO] Setting KasmVNC password..."
-    mkdir -p /root/.vnc
-    (echo "$VNC_PASSWORD" && echo "$VNC_PASSWORD") | kasmvncpasswd -f > /root/.vnc/passwd
-    chmod 600 /root/.vnc/passwd
-    KASM_CMD="kasmvncserver :1 -geometry ${VNC_RESOLUTION} -rfbauth /root/.vnc/passwd"
-fi
+# Install KasmVNC from .deb (multi-arch)
+RUN ARCH=$(dpkg --print-architecture) && \
+    curl -L -o /tmp/kasmvnc.deb https://github.com/kasmtech/KasmVNC/releases/latest/download/kasmvnc-${ARCH}.deb && \
+    apt-get update && apt-get install -y /tmp/kasmvnc.deb && \
+    rm -rf /var/lib/apt/lists/* /tmp/kasmvnc.deb
 
-# Start KasmVNC
-log "[INFO] Starting KasmVNC server on display :1..."
-eval $KASM_CMD
+# Copy OpenCPN from build stage
+COPY --from=opencpn-builder /usr/local /usr/local
 
-# Start XFCE
-log "[INFO] Launching XFCE desktop environment..."
-export DISPLAY=:1
-startxfce4 &
+# Expose VNC port
+EXPOSE 5901
+EXPOSE 10110/udp 10110/tcp
 
-# Wait a bit before OpenCPN
-sleep 3
-log "[INFO] Launching OpenCPN..."
-opencpn &
+# Copy startup script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
-log "[INFO] OpenCPN with KasmVNC is now running!"
-tail -F /root/.vnc/*.log
+ENTRYPOINT ["/start.sh"]
