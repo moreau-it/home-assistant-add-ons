@@ -26,17 +26,17 @@ log "[INFO] Starting DBus..."
 mkdir -p /var/run/dbus
 dbus-daemon --system --fork
 
-# Check if vncserver exists in PATH
-if ! command -v vncserver >/dev/null 2>&1; then
-    log "[ERROR] 'vncserver' not found in PATH! Please check your build."
+# Check if kasmvncserver exists
+if ! command -v kasmvncserver >/dev/null 2>&1; then
+    log "[ERROR] 'kasmvncserver' not found in PATH! Please check your build."
     exit 1
 fi
-log "[DEBUG] Found 'vncserver' in PATH at: $(command -v vncserver)"
+log "[DEBUG] Found kasmvncserver at: $(command -v kasmvncserver)"
 
 # Configure VNC command
 if [ "$INSECURE_MODE" = "true" ]; then
-    log "[INFO] Starting VNC in INSECURE mode..."
-    VNC_CMD="vncserver :1 -geometry ${VNC_RESOLUTION} -SecurityTypes None --I-KNOW-THIS-IS-INSECURE"
+    log "[INFO] Starting KasmVNC in INSECURE mode..."
+    VNC_CMD="kasmvncserver :1 -geometry ${VNC_RESOLUTION} -SecurityTypes None --I-KNOW-THIS-IS-INSECURE"
 else
     if [ -z "$VNC_PASSWORD" ] || [ "$VNC_PASSWORD" = "null" ]; then
         log "[ERROR] VNC password not set! Either enable insecure mode or provide a password."
@@ -44,13 +44,13 @@ else
     fi
     log "[INFO] Setting VNC password..."
     mkdir -p /root/.vnc
-    (echo "$VNC_PASSWORD" && echo "$VNC_PASSWORD") | vncpasswd -f > /root/.vnc/passwd
+    (echo "$VNC_PASSWORD" && echo "$VNC_PASSWORD") | kasmvncpasswd -f > /root/.vnc/passwd
     chmod 600 /root/.vnc/passwd
-    VNC_CMD="vncserver :1 -geometry ${VNC_RESOLUTION} -rfbauth /root/.vnc/passwd"
+    VNC_CMD="kasmvncserver :1 -geometry ${VNC_RESOLUTION} -rfbauth /root/.vnc/passwd"
 fi
 
 # Start VNC
-log "[INFO] Starting VNC server on display :1..."
+log "[INFO] Starting KasmVNC server on display :1..."
 eval $VNC_CMD
 
 # Start noVNC
@@ -67,5 +67,5 @@ sleep 3
 log "[INFO] Launching OpenCPN..."
 opencpn &
 
-log "[INFO] OpenCPN with VNC & noVNC is now running!"
+log "[INFO] OpenCPN with KasmVNC & noVNC is now running!"
 tail -F /root/.vnc/*.log
