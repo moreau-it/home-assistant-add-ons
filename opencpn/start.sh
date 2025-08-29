@@ -71,10 +71,10 @@ else
   fi
   log "[INFO] Setting VNC password for user 'root'..."
   mkdir -p /root/.vnc
-  # Feed password twice via stdin; no -f flag for kasmvncpasswd.
-  printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root
-  chmod 600 /root/.vnc/passwd || true
-  VNC_ARGS+=("-rfbauth" "/root/.vnc/passwd")
+  # Write explicitly to /root/.kasmpasswd (KasmVNC's default location)
+  printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root /root/.kasmpasswd
+  chmod 600 /root/.kasmpasswd || true
+  # KasmVNC uses HTTP Basic Auth backed by ~/.kasmpasswd; -rfbauth is not required
 fi
 
 # Optional: honor VNC_PORT if kasmvncserver supports -rfbport (default is 5900 + display)
