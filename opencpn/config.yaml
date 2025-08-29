@@ -6,10 +6,7 @@ url: "https://github.com/OpenCPN/OpenCPN"
 
 arch:
   - aarch64
-  - armv7
-  - armhf
   - amd64
-  - i386
 
 startup: services
 boot: auto
