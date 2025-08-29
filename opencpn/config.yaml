@@ -14,8 +14,6 @@ init: false
 
 ports:
   6080/tcp: 6080
-  5901/tcp: 5901
-  8444/tcp: 8444
 
 webui: "[PROTO:tcp]://[HOST]:[PORT:6080]/"
 
