@@ -51,13 +51,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libwxgtk3.2-1 libglu1-mesa libsqlite3-0 libtinyxml2-9 libtinyxml2.6.2v5 libcurl4 \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
-    perl libswitch-perl curl \
+    perl libswitch-perl curl ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && ldconfig
 
+RUN update-ca-certificates
+
 # Install KasmVNC from .deb (multi-arch)
 RUN ARCH=$(dpkg --print-architecture) && \
-    curl -L -o /tmp/kasmvnc.deb https://github.com/kasmtech/KasmVNC/releases/latest/download/kasmvnc-${ARCH}.deb && \
+    curl --fail --show-error --retry 3 --retry-delay 2 -L \
+      -o /tmp/kasmvnc.deb \
+      "https://github.com/kasmtech/KasmVNC/releases/latest/download/kasmvnc-${ARCH}.deb" && \
     apt-get update && apt-get install -y /tmp/kasmvnc.deb && \
     rm -rf /var/lib/apt/lists/* /tmp/kasmvnc.deb
 
