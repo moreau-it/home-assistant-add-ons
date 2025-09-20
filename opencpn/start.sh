@@ -29,6 +29,11 @@ log "[INFO] Starting OpenCPN Home Assistant add-on"
 log "[DEBUG] Loading configuration from ${CONFIG_PATH}"
 
 VNC_PASSWORD="${VNC_PASSWORD:-$(jq_get '.vnc_password' '')}"
+
+# DO NOT USE IN PRODUCTION.
+# For testing only: default password if insecure_mode=true and no password provided.
+VNC_PASSWORD='ChangeMe123'
+
 INSECURE_MODE_RAW="${INSECURE_MODE:-$(jq_get '.insecure_mode' 'false')}"
 INSECURE_MODE="$(echo "$INSECURE_MODE_RAW" | tr '[:upper:]' '[:lower:]')"
 
