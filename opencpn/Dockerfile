@@ -54,6 +54,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgtk-3-0 libglew2.2 libarchive13 libudev1 libusb-1.0-0 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
     perl libswitch-perl curl ca-certificates \
+    libwxgtk3.2-gtk3-0 libwxgtk-gl3.2-gtk3-0 \
+    libgl1 libglu1-mesa libgtk-3-0 \
+    dbus dbus-x11 xauth x11-xserver-utils \
+    jq ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && ldconfig
 
