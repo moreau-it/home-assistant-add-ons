@@ -11,13 +11,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake pkg-config gettext git wget curl ca-certificates unzip tar lsb-release \
     libwxgtk3.2-dev libglu1-mesa-dev libsqlite3-dev libtinyxml2-dev libtinyxml-dev \
     libcurl4-openssl-dev libgtk-3-dev libglew-dev libarchive-dev libudev-dev libusb-1.0-0-dev \
-    libpthread-stubs0-dev libssl-dev zlib1g-dev libbz2-dev libexpat1-dev ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    libpthread-stubs0-dev libssl-dev zlib1g-dev libbz2-dev libexpat1-dev \
+ && rm -rf /var/lib/apt/lists/*
 
 RUN update-ca-certificates
 
 # Clone OpenCPN source
 RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git .
+
+# Fix missing legacy TinyXML SONAME required by OpenCPN
+RUN ln -s \
+    /usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/libtinyxml.so \
+    /usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/libtinyxml.so.2.6.2 \
+    || true
 
 # Build OpenCPN
 RUN mkdir build && cd build && \
@@ -30,39 +36,47 @@ RUN mkdir build && cd build && \
       -DCMAKE_CXX_FLAGS="-fPIC -pthread" && \
     make -j$(nproc) && make install
 
-# Clean up build artifacts
 RUN rm -rf /src /build
 
+
 ########################################
-# Stage 2 — Runtime
+# Stage 2 — Runtime environment
 ########################################
 FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
 ENV VNC_RESOLUTION=1280x800
-ENV VNC_PORT=5901
+ENV KASMVNC_PORT=6080
 ENV LD_LIBRARY_PATH=/usr/local/lib
 ENV PATH="/usr/local/bin:/usr/local/sbin:${PATH}"
 
-# Install runtime dependencies (Debian 12/bookworm)
+# Install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Desktop / session
+    # Desktop
     xfce4 xfce4-goodies xfce4-terminal xfce4-session \
     dbus dbus-x11 policykit-1 x11-xserver-utils xauth gvfs gvfs-backends \
-    # OpenCPN deps
+    # OpenCPN runtime deps
     libwxbase3.2-1 libwxgtk3.2-1 libwxgtk-gl3.2-1 \
     libgtk-3-0 libgl1 libglu1-mesa libglew2.2 \
     libarchive13 libudev1 libusb-1.0-0 libsqlite3-0 libcurl4 libssl3 \
     zlib1g libbz2-1.0 libexpat1 \
-    # helpers
+    # tooling
     perl libswitch-perl curl jq ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && ldconfig
 
 RUN update-ca-certificates
 
-# jq is already present in your image list; ensure it is installed before this step.
+# Fix TinyXML library for OpenCPN runtime
+RUN ln -s \
+    /usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/libtinyxml.so \
+    /usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/libtinyxml.so.2.6.2 \
+    || true
+
+########################################
+# Install latest KasmVNC
+########################################
 RUN set -eux; \
     . /etc/os-release; \
     ARCH="$(dpkg --print-architecture)"; \
@@ -71,19 +85,32 @@ RUN set -eux; \
         | jq -r --arg arch "$ARCH" --arg dist "$DISTRO" \
         '.assets[] | select(.name | test("^kasmvncserver_" + $dist + "_[0-9.]+_" + $arch + "\\.deb$")) \
         | .browser_download_url')"; \
-    curl --fail --show-error --retry 3 --retry-delay 2 -L -o /tmp/kasmvnc.deb "$URL"; \
+    curl --fail --show-error --retry 3 -L -o /tmp/kasmvnc.deb "$URL"; \
     apt-get update && apt-get install -y /tmp/kasmvnc.deb; \
     rm -rf /var/lib/apt/lists/* /tmp/kasmvnc.deb
 
-# Copy OpenCPN from build stage
+
+########################################
+# Install OpenCPN from build stage
+########################################
 COPY --from=opencpn-builder /usr/local /usr/local
 
-# Expose VNC port
-EXPOSE 5901
-EXPOSE 10110/udp 10110/tcp
 
-# Copy startup script
+########################################
+# Add startup script
+########################################
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
+
+########################################
+# Expose ports
+########################################
+EXPOSE 6080/tcp
+EXPOSE 10110/tcp 10110/udp
+
+
+########################################
+# Start add-on
+########################################
 ENTRYPOINT ["/start.sh"]
