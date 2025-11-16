@@ -106,6 +106,15 @@ network:
   websocket_port: ${KASMVNC_PORT}
   ssl:
     require_ssl: false
+  vnc:
+  authentication: none
+  
+ssl:
+  enable: false
+
+users:
+  root:
+    allow_writes: true
 EOF
 
 chmod 600 /etc/kasmvnc/kasmvnc.yaml || true
