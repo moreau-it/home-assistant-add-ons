@@ -12,19 +12,23 @@ startup: services
 boot: auto
 init: false
 
+# Host port (for direct access: http://homeassistant.local:6080)
+# If you ONLY want ingress, you can comment this whole 'ports' block out.
 ports:
   "6080/tcp": 6080
 ports_description:
   "6080/tcp": "KasmVNC web (HTTP & HTTPS)"
 
+# Direct webui link (outside ingress)
 webui: "http://[HOST]:[PORT:6080]/"
 
+# Ingress / sidebar
 ingress: true
-ingress_port: 6080
+ingress_port: 6080           # internal port used by KasmVNC
 
 panel_title: "OpenCPN"
 panel_icon: "mdi:crosshairs-gps"
-panel_admin: false
+panel_admin: false           # set true if you want it visible only to admins
 
 devices:
   - /dev/ttyAMA0
@@ -46,7 +50,7 @@ map:
   - config:rw
 
 options:
-  vnc_password: "ChangeMe123"   # ≥ 6 chars; used for KasmVNC Basic Auth (user: root)
+  vnc_password: "ChangeMe123"
   insecure_mode: false
 
 schema:
