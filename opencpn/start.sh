@@ -213,7 +213,6 @@ server:
     x_font_path: auto
     kasm_password_file: /root/.kasmpasswd
     x_authority_file: auto
-    clipboard_synced: true
   auto_shutdown:
     no_user_session_timeout: never
     active_user_session_timeout: never
