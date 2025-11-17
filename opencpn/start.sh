@@ -142,7 +142,9 @@ runtime_configuration:
     - data_loss_prevention.clipboard.server_to_client.enabled
     - data_loss_prevention.clipboard.client_to_server.enabled
     - data_loss_prevention.clipboard.server_to_client.primary_clipboard_enabled
-
+    - data_loss_prevention.clipboard.client_to_server.size
+    - data_loss_prevention.clipboard.server_to_client.size
+    
 logging:
   log_writer_name: all
   log_dest: logfile
@@ -156,13 +158,14 @@ data_loss_prevention:
   clipboard:
     delay_between_operations: none
     allow_mimetypes:
-      - chromium/x-web-custom-data
+      - text/plain
       - text/html
       - image/png
+      - chromium/x-web-custom-data
     server_to_client:
       enabled: true
       size: unlimited
-      primary_clipboard_enabled: false
+      primary_clipboard_enabled: true
     client_to_server:
       enabled: true
       size: unlimited
