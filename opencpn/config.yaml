@@ -19,6 +19,8 @@ ports_description:
 
 webui: "http://[HOST]:[PORT:6080]/"
 
+ingress: false
+
 devices:
   - /dev/ttyAMA0
   - /dev/ttyUSB0
