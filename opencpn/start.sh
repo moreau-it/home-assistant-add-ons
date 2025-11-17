@@ -84,7 +84,18 @@ mkdir -p /root
 printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
 chmod 600 /root/.kasmpasswd || true
 
-# Simple allow list (may or may not be used by this version, harmless)
+# ---------- OpenCPN autostart in XFCE ----------
+log "[INFO] Configuring XFCE autostart for OpenCPN..."
+mkdir -p /root/.config/autostart
+cat >/root/.config/autostart/opencpn.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=OpenCPN
+Exec=opencpn
+X-GNOME-Autostart-enabled=true
+EOF
+
+# ---------- KasmVNC YAML config ----------
 log "[INFO] Writing KasmVNC YAML config..."
 mkdir -p /etc/kasmvnc /root/.vnc
 
@@ -136,11 +147,6 @@ logging:
   log_writer_name: all
   log_dest: logfile
   level: 30
-
-security:
-  brute_force_protection:
-    blacklist_threshold: 5
-    blacklist_timeout: 10
 
 data_loss_prevention:
   visible_region:
@@ -215,11 +221,10 @@ EOF
 
 # Some builds read ~/.vnc/kasmvnc.yaml instead of /etc/kasmvnc
 cp /etc/kasmvnc/kasmvnc.yaml /root/.vnc/kasmvnc.yaml
-
 chmod 600 /etc/kasmvnc/kasmvnc.yaml || true
 
 # ---------- Start KasmVNC (vncserver wrapper, non-interactive DE) ----------
-log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP+HTTPS :${KASMVNC_PORT})..."
+log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${KASMVNC_PORT}, BasicAuth DISABLED)..."
 
 # Best-effort cleanup, but do NOT block indefinitely if it hangs
 if command -v timeout >/dev/null 2>&1; then
@@ -230,9 +235,12 @@ fi
 
 # Start a session with XFCE as desktop environment, non-interactively.
 # /etc/kasmvnc/kasmvnc.yaml is picked up automatically for network/port config.
+# -disableBasicAuth disables HTTP BasicAuth, ideal for HA iframe usage.
 vncserver "${DISPLAY}" \
   -select-de xfce \
-  -geometry "${VNC_RESOLUTION}" >/var/log/kasmvncserver.log 2>&1 &
+  -geometry "${VNC_RESOLUTION}" \
+  -disableBasicAuth \
+  >/var/log/kasmvncserver.log 2>&1 &
 
 # ---------- Verify listeners (up to 30s) ----------
 ok_http=false
@@ -257,8 +265,8 @@ if ! $ok_http && ! $ok_https; then
 fi
 
 # ---------- Ready ----------
-log "[INFO] Ready. Open your browser to: http://[HOST]:${KASMVNC_PORT}/  or  https://[HOST]:${KASMVNC_PORT}/"
-log "[INFO] Username: root  (password from options.json / env)"
+log "[INFO] Ready. Open your browser (or HA iframe) to: http://[HOST]:${KASMVNC_PORT}/"
+log "[INFO] HTTP BasicAuth is DISABLED; access is controlled by your network/HA only."
 
 # ---------- Keep container alive ----------
 shopt -s nullglob
