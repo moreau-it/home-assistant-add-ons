@@ -12,23 +12,25 @@ startup: services
 boot: auto
 init: false
 
-# Host port (for direct access: http://homeassistant.local:6080)
-# If you ONLY want ingress, you can comment this whole 'ports' block out.
-ports:
-  "6080/tcp": 6080
-ports_description:
-  "6080/tcp": "KasmVNC web (HTTP & HTTPS)"
+# 🔹 Ingress-only: no direct host port here
+# If you later want direct access again, you can re-add the ports block.
+# ports:
+#   "6080/tcp": 6080
+# ports_description:
+#   "6080/tcp": "KasmVNC web (HTTP & HTTPS)"
 
-# Direct webui link (outside ingress)
-webui: "http://[HOST]:[PORT:6080]/"
+# 🔹 For ingress add-ons, webui is usually left out or points to the ingress URL.
+# Home Assistant ignores [HOST]/[PORT] here when using ingress.
+# You can safely remove it:
+# webui: "http://[HOST]:[PORT:6080]/"
 
-# Ingress / sidebar
+# 🔹 Ingress configuration
 ingress: true
-ingress_port: 6080           # internal port used by KasmVNC
+ingress_port: 6080         # internal port where KasmVNC listens
 
 panel_title: "OpenCPN"
 panel_icon: "mdi:crosshairs-gps"
-panel_admin: false           # set true if you want it visible only to admins
+panel_admin: false         # true = only admins see the sidebar entry
 
 devices:
   - /dev/ttyAMA0
