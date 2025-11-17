@@ -19,7 +19,12 @@ ports_description:
 
 webui: "http://[HOST]:[PORT:6080]/"
 
-ingress: false
+ingress: true
+ingress_port: 6080
+
+panel_title: "OpenCPN"
+panel_icon: "mdi:crosshairs-gps"
+panel_admin: false
 
 devices:
   - /dev/ttyAMA0
