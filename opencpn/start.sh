@@ -226,6 +226,7 @@ fi
 vncserver "${DISPLAY}" \
   -select-de xfce \
   -geometry "${VNC_RESOLUTION}" \
+  -disableBasicAuth \
   >/var/log/kasmvncserver.log 2>&1 &
 
 # Wait for KasmVNC to listen on INTERNAL_PORT
