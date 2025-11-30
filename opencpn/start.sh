@@ -104,6 +104,7 @@ EOF
 log "[INFO] Writing KasmVNC YAML config..."
 mkdir -p /etc/kasmvnc /root/.vnc
 
+# First part of YAML (up to server.advanced)
 cat >/etc/kasmvnc/kasmvnc.yaml <<EOF
 desktop:
   resolution:
@@ -216,8 +217,22 @@ server:
     httpd_directory: /usr/share/kasmvnc/www
   advanced:
     x_font_path: auto
+EOF
+
+#Conditionally add kasm_password_file
+if [[ "$USE_AUTH" == "true" ]]; then
+  cat >>/etc/kasmvnc/kasmvnc.yaml <<'EOF'
     kasm_password_file: /root/.kasmpasswd
     x_authority_file: auto
+EOF
+else
+  cat >>/etc/kasmvnc/kasmvnc.yaml <<'EOF'
+    x_authority_file: auto
+EOF
+fi
+
+# Rest of YAML
+cat >>/etc/kasmvnc/kasmvnc.yaml <<'EOF'
   auto_shutdown:
     no_user_session_timeout: never
     active_user_session_timeout: never
