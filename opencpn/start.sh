@@ -55,22 +55,28 @@ command -v kasmvncpasswd >/dev/null 2>&1 || { log "[ERROR] 'kasmvncpasswd' not f
 command -v jq            >/dev/null 2>&1 || log "[WARN] 'jq' not found; options.json parsing may be limited."
 command -v curl          >/dev/null 2>&1 || log "[WARN] 'curl' not found; HTTP health checks will be skipped."
 
-# ---------- Password handling ----------
-# If insecure_mode=true and no password provided, use weak default
-if [[ "$INSECURE_MODE" == "true" && -z "${VNC_PASSWORD:-}" ]]; then
-  VNC_PASSWORD="opencpn"
-  log "[WARN] insecure_mode=true and no password provided; using default 'opencpn' (INSECURE)"
+# ---------- Auth decision (IMPORTANT) ----------
+# Default: no auth, unless insecure_mode=false
+USE_AUTH="false"
+
+if [[ "$INSECURE_MODE" == "true" ]]; then
+  log "[INFO] insecure_mode=true → running WITHOUT KasmVNC password (for HA ingress)"
+else
+  USE_AUTH="true"
+  if [[ -z "${VNC_PASSWORD:-}" ]]; then
+    log "[ERROR] No VNC password set and insecure_mode=false."
+    log "[ERROR] Set 'vnc_password' in options.json or enable insecure_mode."
+    exit 1
+  fi
 fi
 
-# If still empty: error out (safer than hidden default)
-if [[ -z "${VNC_PASSWORD:-}" ]]; then
-  log "[ERROR] No VNC password set. Provide 'vnc_password' in options.json or set INSECURE_MODE=true."
-  exit 1
+MASKED=""
+if [[ "$USE_AUTH" == "true" && -n "${VNC_PASSWORD:-}" ]]; then
+  MASKED="******"
 fi
 
-MASKED=""; [[ -n "${VNC_PASSWORD:-}" ]] && MASKED="******"
 log "[DEBUG] display='${DISPLAY}', resolution='${VNC_RESOLUTION}'"
-log "[DEBUG] insecure_mode='${INSECURE_MODE}', vnc_password='${MASKED}'"
+log "[DEBUG] insecure_mode='${INSECURE_MODE}', use_auth='${USE_AUTH}', vnc_password='${MASKED}'"
 log "[DEBUG] kasmvnc_port='${KASMVNC_PORT}' (HTTP and HTTPS)"
 
 # ---------- DBus ----------
@@ -259,10 +265,15 @@ fi
 # Start a session with XFCE as desktop environment, non-interactively.
 # /etc/kasmvnc/kasmvnc.yaml is picked up automatically for network/port config.
 # -disableBasicAuth disables HTTP BasicAuth, ideal for HA iframe usage.
+VNC_EXTRA_ARGS=()
+if [[ "$USE_AUTH" == "false" ]]; then
+  VNC_EXTRA_ARGS+=("-disableBasicAuth")
+fi
+
 vncserver "${DISPLAY}" \
   -select-de xfce \
   -geometry "${VNC_RESOLUTION}" \
-  -disableBasicAuth \
+  "${VNC_EXTRA_ARGS[@]}" \
   >/var/log/kasmvncserver.log 2>&1 &
 
 # ---------- Verify listeners (up to 30s) ----------
