@@ -8,7 +8,7 @@ CONFIG_PATH="/data/options.json"
 DISPLAY="${DISPLAY:-:1}"
 VNC_RESOLUTION="${VNC_RESOLUTION:-1280x800}"
 
-# External port seen by HA ingress (must match ingress_port in config.json)
+# External port seen by HA ingress (must match ingress_port in config.yaml)
 EXTERNAL_PORT=6080
 # Internal port where KasmVNC will actually listen
 INTERNAL_PORT=6901
@@ -36,6 +36,13 @@ VNC_PASSWORD="${VNC_PASSWORD:-$(jq_get '.vnc_password' '')}"
 INSECURE_MODE_RAW="${INSECURE_MODE:-$(jq_get '.insecure_mode' 'false')}"
 INSECURE_MODE="$(echo "$INSECURE_MODE_RAW" | tr '[:upper:]' '[:lower:]')"
 
+# USE_AUTH = whether Kasm HTTP BasicAuth is enabled
+if [[ "$INSECURE_MODE" == "true" ]]; then
+  USE_AUTH="false"
+else
+  USE_AUTH="true"
+fi
+
 # ---------- Sanity checks ----------
 command -v vncserver     >/dev/null 2>&1 || { log "[ERROR] 'vncserver' (KasmVNC) not found"; exit 1; }
 command -v kasmvncpasswd >/dev/null 2>&1 || { log "[ERROR] 'kasmvncpasswd' not found"; exit 1; }
@@ -44,21 +51,19 @@ command -v jq            >/dev/null 2>&1 || log "[WARN] 'jq' not found; options.
 command -v curl          >/dev/null 2>&1 || log "[WARN] 'curl' not found; HTTP health checks will be skipped."
 
 # ---------- Password handling ----------
-# For HA ingress we still need a user, but HTTP auth will be handled by nginx.
-# If insecure_mode=true and no password is set, use a weak default.
-if [[ "$INSECURE_MODE" == "true" && -z "${VNC_PASSWORD:-}" ]]; then
-  VNC_PASSWORD="opencpn"
-  log "[WARN] insecure_mode=true and no vnc_password set; using default 'opencpn'"
-fi
-
 if [[ -z "${VNC_PASSWORD:-}" ]]; then
-  log "[ERROR] No VNC password set. Set 'vnc_password' in options.json or enable insecure_mode."
-  exit 1
+  if [[ "$INSECURE_MODE" == "true" ]]; then
+    VNC_PASSWORD="opencpn"
+    log "[WARN] insecure_mode=true and no vnc_password set; using default 'opencpn'"
+  else
+    log "[ERROR] No VNC password set. Set 'vnc_password' in options.json or enable insecure_mode."
+    exit 1
+  fi
 fi
 
 MASKED="******"
 log "[DEBUG] display='${DISPLAY}', resolution='${VNC_RESOLUTION}'"
-log "[DEBUG] insecure_mode='${INSECURE_MODE}', vnc_password='${MASKED}'"
+log "[DEBUG] insecure_mode='${INSECURE_MODE}', use_auth='${USE_AUTH}', vnc_password='${MASKED}'"
 log "[DEBUG] internal_port='${INTERNAL_PORT}', external_port='${EXTERNAL_PORT}'"
 
 # ---------- DBus ----------
@@ -66,7 +71,7 @@ log "[INFO] Ensuring DBus is running..."
 mkdir -p /var/run/dbus
 pgrep -x dbus-daemon >/dev/null 2>&1 || dbus-daemon --system --fork
 
-# ---------- KasmVNC auth ----------
+# ---------- KasmVNC auth (VNC user) ----------
 log "[INFO] Setting KasmVNC password for user 'root'..."
 mkdir -p /root
 printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
@@ -199,7 +204,16 @@ server:
     httpd_directory: /usr/share/kasmvnc/www
   advanced:
     x_font_path: auto
+EOF
+
+# Conditionally add the HTTP BasicAuth password file
+if [[ "$USE_AUTH" == "true" ]]; then
+  cat >>/etc/kasmvnc/kasmvnc.yaml <<'EOF'
     kasm_password_file: /root/.kasmpasswd
+EOF
+fi
+
+cat >>/etc/kasmvnc/kasmvnc.yaml <<'EOF'
     x_authority_file: auto
   auto_shutdown:
     no_user_session_timeout: never
@@ -214,7 +228,11 @@ cp /etc/kasmvnc/kasmvnc.yaml /root/.vnc/kasmvnc.yaml
 chmod 600 /etc/kasmvnc/kasmvnc.yaml || true
 
 # ---------- Start KasmVNC ----------
-log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, BasicAuth ENABLED)..."
+if [[ "$USE_AUTH" == "true" ]]; then
+  log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth ENABLED)..."
+else
+  log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth DISABLED)..."
+fi
 
 # Best-effort cleanup, but do NOT block indefinitely if it hangs
 if command -v timeout >/dev/null 2>&1; then
@@ -226,7 +244,6 @@ fi
 vncserver "${DISPLAY}" \
   -select-de xfce \
   -geometry "${VNC_RESOLUTION}" \
-  -disableBasicAuth \
   >/var/log/kasmvncserver.log 2>&1 &
 
 # Wait for KasmVNC to listen on INTERNAL_PORT
@@ -240,9 +257,14 @@ if command -v curl >/dev/null 2>&1; then
   done
 fi
 
-# ---------- nginx as auth-injecting proxy ----------
+# ---------- nginx as optional auth-injecting proxy ----------
 log "[INFO] Writing nginx config..."
-AUTH_B64="$(printf 'root:%s' "$VNC_PASSWORD" | base64 | tr -d '\n')"
+
+AUTH_HEADER_LINE="# no Authorization header (USE_AUTH=false)"
+if [[ "$USE_AUTH" == "true" ]]; then
+  AUTH_B64="$(printf 'root:%s' "$VNC_PASSWORD" | base64 | tr -d '\n')"
+  AUTH_HEADER_LINE="proxy_set_header Authorization \"Basic ${AUTH_B64}\";"
+fi
 
 cat >/etc/nginx/nginx.conf <<EOF
 events {}
@@ -252,8 +274,7 @@ http {
     listen ${EXTERNAL_PORT};
 
     location / {
-      # If someone hits "/" (what HA ingress does), send them to the Kasm UI.
-      # You can also use /vnc_auto.html if you prefer the auto-connect page.
+      # When HA ingress hits "/", send it to the Kasm UI page.
       rewrite ^/$ /vnc.html break;
 
       proxy_pass http://127.0.0.1:${INTERNAL_PORT};
@@ -264,8 +285,7 @@ http {
       proxy_set_header Upgrade \$http_upgrade;
       proxy_set_header Connection "upgrade";
 
-      # Inject Basic Auth for KasmVNC
-      proxy_set_header Authorization "Basic ${AUTH_B64}";
+      ${AUTH_HEADER_LINE}
     }
   }
 }
