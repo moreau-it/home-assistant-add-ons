@@ -251,6 +251,10 @@ http {
     listen ${EXTERNAL_PORT};
 
     location / {
+      # If someone hits "/" (what HA ingress does), send them to the Kasm UI.
+      # You can also use /vnc_auto.html if you prefer the auto-connect page.
+      rewrite ^/$ /vnc.html break;
+
       proxy_pass http://127.0.0.1:${INTERNAL_PORT};
       proxy_http_version 1.1;
       proxy_set_header Host \$host;
