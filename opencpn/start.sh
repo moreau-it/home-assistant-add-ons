@@ -243,14 +243,12 @@ http {
     listen ${EXTERNAL_PORT};
 
     location / {
-      # When HA ingress hits "/", send it to the Kasm UI page.
-      rewrite ^/\$ /vnc.html break;
-
+      # Just proxy straight to Kasm on 6901.
+      # Kasm itself will serve the UI on "/".
       proxy_pass http://127.0.0.1:${INTERNAL_PORT};
       proxy_http_version 1.1;
 
-      # Make Kasm think everything is coming from localhost,
-      # just like our working curl tests.
+      # Make it look like localhost to Kasm (matches your working curl test).
       proxy_set_header Host 127.0.0.1;
       proxy_set_header X-Real-IP 127.0.0.1;
       proxy_set_header X-Forwarded-For 127.0.0.1;
@@ -258,7 +256,7 @@ http {
       proxy_set_header Upgrade \$http_upgrade;
       proxy_set_header Connection "upgrade";
 
-      # Inject HTTP Basic auth so the browser never sees 401.
+      # Inject HTTP Basic auth so browser never sees 401.
       proxy_set_header Authorization "Basic ${AUTH_B64}";
     }
   }
