@@ -55,28 +55,23 @@ command -v kasmvncpasswd >/dev/null 2>&1 || { log "[ERROR] 'kasmvncpasswd' not f
 command -v jq            >/dev/null 2>&1 || log "[WARN] 'jq' not found; options.json parsing may be limited."
 command -v curl          >/dev/null 2>&1 || log "[WARN] 'curl' not found; HTTP health checks will be skipped."
 
-# ---------- Auth decision (IMPORTANT) ----------
-# Default: no auth, unless insecure_mode=false
-USE_AUTH="false"
-
-if [[ "$INSECURE_MODE" == "true" ]]; then
-  log "[INFO] insecure_mode=true → running WITHOUT KasmVNC password (for HA ingress)"
-else
-  USE_AUTH="true"
-  if [[ -z "${VNC_PASSWORD:-}" ]]; then
-    log "[ERROR] No VNC password set and insecure_mode=false."
-    log "[ERROR] Set 'vnc_password' in options.json or enable insecure_mode."
-    exit 1
-  fi
+# ---------- Password & auth handling ----------
+# For HA ingress we still need a user, but we don't want HTTP Basic.
+# So we ALWAYS create a KasmVNC user/password, and ALWAYS disable HTTP BasicAuth.
+# If insecure_mode=true and no password is set, use a weak default.
+if [[ "$INSECURE_MODE" == "true" && -z "${VNC_PASSWORD:-}" ]]; then
+  VNC_PASSWORD="opencpn"
+  log "[WARN] insecure_mode=true and no vnc_password set; using default 'opencpn'"
 fi
 
-MASKED=""
-if [[ "$USE_AUTH" == "true" && -n "${VNC_PASSWORD:-}" ]]; then
-  MASKED="******"
+if [[ -z "${VNC_PASSWORD:-}" ]]; then
+  log "[ERROR] No VNC password set. Set 'vnc_password' in options.json or enable insecure_mode to use default."
+  exit 1
 fi
 
+MASKED="******"
 log "[DEBUG] display='${DISPLAY}', resolution='${VNC_RESOLUTION}'"
-log "[DEBUG] insecure_mode='${INSECURE_MODE}', use_auth='${USE_AUTH}', vnc_password='${MASKED}'"
+log "[DEBUG] insecure_mode='${INSECURE_MODE}', vnc_password='${MASKED}'"
 log "[DEBUG] kasmvnc_port='${KASMVNC_PORT}' (HTTP and HTTPS)"
 
 # ---------- DBus ----------
@@ -84,16 +79,11 @@ log "[INFO] Ensuring DBus is running..."
 mkdir -p /var/run/dbus
 pgrep -x dbus-daemon >/dev/null 2>&1 || dbus-daemon --system --fork
 
-# ---------- KasmVNC auth ----------
-if [[ "$USE_AUTH" == "true" ]]; then
-  log "[INFO] Setting KasmVNC password for user 'root'..."
-  mkdir -p /root
-  printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
-  chmod 600 /root/.kasmpasswd || true
-else
-  log "[INFO] USE_AUTH=false → not creating KasmVNC password file"
-  rm -f /root/.kasmpasswd || true
-fi
+# ---------- KasmVNC auth (ALWAYS configure a user) ----------
+log "[INFO] Setting KasmVNC password for user 'root'..."
+mkdir -p /root
+printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
+chmod 600 /root/.kasmpasswd || true
 
 # ---------- OpenCPN autostart in XFCE ----------
 log "[INFO] Configuring XFCE autostart for OpenCPN..."
@@ -110,7 +100,6 @@ EOF
 log "[INFO] Writing KasmVNC YAML config..."
 mkdir -p /etc/kasmvnc /root/.vnc
 
-# First part of YAML (up to server.advanced)
 cat >/etc/kasmvnc/kasmvnc.yaml <<EOF
 desktop:
   resolution:
@@ -223,22 +212,8 @@ server:
     httpd_directory: /usr/share/kasmvnc/www
   advanced:
     x_font_path: auto
-EOF
-
-#Conditionally add kasm_password_file
-if [[ "$USE_AUTH" == "true" ]]; then
-  cat >>/etc/kasmvnc/kasmvnc.yaml <<'EOF'
     kasm_password_file: /root/.kasmpasswd
     x_authority_file: auto
-EOF
-else
-  cat >>/etc/kasmvnc/kasmvnc.yaml <<'EOF'
-    x_authority_file: auto
-EOF
-fi
-
-# Rest of YAML
-cat >>/etc/kasmvnc/kasmvnc.yaml <<'EOF'
   auto_shutdown:
     no_user_session_timeout: never
     active_user_session_timeout: never
@@ -253,7 +228,7 @@ cp /etc/kasmvnc/kasmvnc.yaml /root/.vnc/kasmvnc.yaml
 chmod 600 /etc/kasmvnc/kasmvnc.yaml || true
 
 # ---------- Start KasmVNC (vncserver wrapper, non-interactive DE) ----------
-log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${KASMVNC_PORT}, BasicAuth DISABLED)..."
+log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${KASMVNC_PORT}, HTTP BasicAuth DISABLED)..."
 
 # Best-effort cleanup, but do NOT block indefinitely if it hangs
 if command -v timeout >/dev/null 2>&1; then
@@ -262,18 +237,11 @@ else
   vncserver -kill "${DISPLAY}" >/dev/null 2>&1 || true
 fi
 
-# Start a session with XFCE as desktop environment, non-interactively.
-# /etc/kasmvnc/kasmvnc.yaml is picked up automatically for network/port config.
-# -disableBasicAuth disables HTTP BasicAuth, ideal for HA iframe usage.
-VNC_EXTRA_ARGS=()
-if [[ "$USE_AUTH" == "false" ]]; then
-  VNC_EXTRA_ARGS+=("-disableBasicAuth")
-fi
-
+# Always disable HTTP BasicAuth (ingress-friendly), but keep VNC password.
 vncserver "${DISPLAY}" \
   -select-de xfce \
   -geometry "${VNC_RESOLUTION}" \
-  "${VNC_EXTRA_ARGS[@]}" \
+  -disableBasicAuth \
   >/var/log/kasmvncserver.log 2>&1 &
 
 # ---------- Verify listeners (up to 30s) ----------
@@ -300,7 +268,7 @@ fi
 
 # ---------- Ready ----------
 log "[INFO] Ready. Open your browser (or HA iframe) to: http://[HOST]:${KASMVNC_PORT}/"
-log "[INFO] HTTP BasicAuth is DISABLED; access is controlled by your network/HA only."
+log "[INFO] HTTP BasicAuth is DISABLED; VNC password is required inside the Kasm web UI."
 
 # ---------- Keep container alive ----------
 shopt -s nullglob
