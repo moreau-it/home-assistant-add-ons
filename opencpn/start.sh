@@ -190,6 +190,7 @@ server:
     httpd_directory: /usr/share/kasmvnc/www
   advanced:
     x_font_path: auto
+    kasm_password_file: /root/.kasmpasswd
     x_authority_file: auto
   auto_shutdown:
     no_user_session_timeout: never
@@ -204,7 +205,7 @@ cp /etc/kasmvnc/kasmvnc.yaml /root/.vnc/kasmvnc.yaml
 chmod 600 /etc/kasmvnc/kasmvnc.yaml || true
 
 # ---------- Start KasmVNC ----------
-log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth DISABLED, VNC password enabled)..."
+log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth ENABLED)..."
 
 # Best-effort cleanup, but do NOT block indefinitely if it hangs
 if command -v timeout >/dev/null 2>&1; then
@@ -216,7 +217,6 @@ fi
 vncserver "${DISPLAY}" \
   -select-de xfce \
   -geometry "${VNC_RESOLUTION}" \
-  --disableBasicAuth \
   >/var/log/kasmvncserver.log 2>&1 &
 
 # Wait for KasmVNC to listen on INTERNAL_PORT
@@ -230,8 +230,10 @@ if command -v curl >/dev/null 2>&1; then
   done
 fi
 
-# ---------- nginx as simple reverse proxy ----------
+# ---------- nginx as auth-injecting reverse proxy ----------
 log "[INFO] Writing nginx config..."
+
+AUTH_B64="$(printf 'root:%s' "$VNC_PASSWORD" | base64 | tr -d '\n')"
 
 cat >/etc/nginx/nginx.conf <<EOF
 events {}
@@ -255,6 +257,9 @@ http {
 
       proxy_set_header Upgrade \$http_upgrade;
       proxy_set_header Connection "upgrade";
+
+      # Inject HTTP Basic auth so the browser never sees 401.
+      proxy_set_header Authorization "Basic ${AUTH_B64}";
     }
   }
 }
