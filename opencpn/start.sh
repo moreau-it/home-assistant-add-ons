@@ -79,10 +79,15 @@ mkdir -p /var/run/dbus
 pgrep -x dbus-daemon >/dev/null 2>&1 || dbus-daemon --system --fork
 
 # ---------- KasmVNC auth ----------
-log "[INFO] Setting KasmVNC password for user 'root'..."
-mkdir -p /root
-printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
-chmod 600 /root/.kasmpasswd || true
+if [[ "$USE_AUTH" == "true" ]]; then
+  log "[INFO] Setting KasmVNC password for user 'root'..."
+  mkdir -p /root
+  printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
+  chmod 600 /root/.kasmpasswd || true
+else
+  log "[INFO] USE_AUTH=false → not creating KasmVNC password file"
+  rm -f /root/.kasmpasswd || true
+fi
 
 # ---------- OpenCPN autostart in XFCE ----------
 log "[INFO] Configuring XFCE autostart for OpenCPN..."
