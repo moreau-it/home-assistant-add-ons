@@ -271,7 +271,7 @@ nginx -g 'daemon off;' >/var/log/nginx.log 2>&1 &
 
 # Final health check on nginx (external port)
 if command -v curl >/dev/null 2>&1; then
-  for i in {1..30}; i++ 2>/dev/null || true; do
+  for i in {1..30}; do
     if curl -sI "http://127.0.0.1:${EXTERNAL_PORT}/" >/dev/null 2>&1; then
       log "[INFO] nginx is listening at http://127.0.0.1:${EXTERNAL_PORT}/"
       break
