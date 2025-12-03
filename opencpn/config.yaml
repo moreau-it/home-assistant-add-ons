@@ -1,5 +1,5 @@
- name: "OpenCPN"
-version: "latest"
+name: "OpenCPN"
+version: "0.1.0"
 slug: "opencpn"
 description: "Marine navigation app OpenCPN running as a Home Assistant add-on with KasmVNC"
 url: "https://github.com/moreau-it/home-assistant-add-ons"
@@ -12,19 +12,19 @@ startup: services
 boot: auto
 init: false
 
-# 🔹 Ingress (for Home Assistant sidebar / panel)
+# Ingress (for sidebar / HA UI)
 ingress: true
-ingress_port: 6080   # KasmVNC listens on 6080 inside the container
+ingress_port: 6080
 
 panel_title: "OpenCPN"
 panel_icon: "mdi:crosshairs-gps"
-panel_admin: false    # set true if you want only admins to see it
+panel_admin: false
 
-# 🔹 Direct port for Cloudflare / local browser
+# Direct port (for Cloudflare / external)
 ports:
   "6080/tcp": 6080
 ports_description:
-  "6080/tcp": "KasmVNC Web Interface (HTTP/WebSocket)"
+  "6080/tcp": "KasmVNC Web Interface (HTTP/Websocket)"
 
 devices:
   - /dev/ttyAMA0
@@ -47,7 +47,7 @@ map:
 
 options:
   vnc_password: "ChangeMe123"
-  insecure_mode: false
+  insecure_mode: true
 
 schema:
   vnc_password: password?
