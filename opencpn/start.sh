@@ -8,9 +8,7 @@ CONFIG_PATH="/data/options.json"
 DISPLAY="${DISPLAY:-:1}"
 VNC_RESOLUTION="${VNC_RESOLUTION:-1280x800}"
 
-# External port seen by HA ingress (must match ingress_port in config.yaml)
-EXTERNAL_PORT=6080
-# Internal port where KasmVNC will actually listen
+# KasmVNC HTTP/Websocket port inside the container
 INTERNAL_PORT=6901
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
@@ -36,6 +34,12 @@ VNC_PASSWORD="${VNC_PASSWORD:-$(jq_get '.vnc_password' '')}"
 INSECURE_MODE_RAW="${INSECURE_MODE:-$(jq_get '.insecure_mode' 'false')}"
 INSECURE_MODE="$(echo "$INSECURE_MODE_RAW" | tr '[:upper:]' '[:lower:]')"
 
+# ---------- Sanity checks ----------
+command -v vncserver     >/dev/null 2>&1 || { log "[ERROR] 'vncserver' (KasmVNC) not found"; exit 1; }
+command -v kasmvncpasswd >/dev/null 2>&1 || { log "[ERROR] 'kasmvncpasswd' not found"; exit 1; }
+command -v jq            >/dev/null 2>&1 || log "[WARN] 'jq' not found; options.json parsing may be limited."
+command -v curl          >/dev/null 2>&1 || log "[WARN] 'curl' not found; HTTP health checks will be skipped."
+
 # ---------- Password handling ----------
 if [[ -z "${VNC_PASSWORD:-}" ]]; then
   if [[ "$INSECURE_MODE" == "true" ]]; then
@@ -50,14 +54,14 @@ fi
 MASKED="******"
 log "[DEBUG] display='${DISPLAY}', resolution='${VNC_RESOLUTION}'"
 log "[DEBUG] insecure_mode='${INSECURE_MODE}', vnc_password='${MASKED}'"
-log "[DEBUG] internal_port='${INTERNAL_PORT}', external_port='${EXTERNAL_PORT}'"
+log "[DEBUG] internal_port='${INTERNAL_PORT}'"
 
 # ---------- DBus ----------
 log "[INFO] Ensuring DBus is running..."
 mkdir -p /var/run/dbus
 pgrep -x dbus-daemon >/dev/null 2>&1 || dbus-daemon --system --fork
 
-# ---------- KasmVNC auth (VNC user) ----------
+# ---------- KasmVNC auth (VNC + HTTP Basic for user root) ----------
 log "[INFO] Setting KasmVNC password for user 'root'..."
 mkdir -p /root
 printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
@@ -230,58 +234,11 @@ if command -v curl >/dev/null 2>&1; then
   done
 fi
 
-# ---------- nginx as auth-injecting reverse proxy ----------
-log "[INFO] Writing nginx config..."
-
-AUTH_B64="$(printf 'root:%s' "$VNC_PASSWORD" | base64 | tr -d '\n')"
-
-cat >/etc/nginx/nginx.conf <<EOF
-events {}
-
-http {
-  server {
-    listen ${EXTERNAL_PORT};
-
-    location / {
-      # Just proxy straight to Kasm on 6901.
-      # Kasm itself will serve the UI on "/".
-      proxy_pass http://127.0.0.1:${INTERNAL_PORT};
-      proxy_http_version 1.1;
-
-      # Make it look like localhost to Kasm (matches your working curl test).
-      proxy_set_header Host 127.0.0.1;
-      proxy_set_header X-Real-IP 127.0.0.1;
-      proxy_set_header X-Forwarded-For 127.0.0.1;
-
-      proxy_set_header Upgrade \$http_upgrade;
-      proxy_set_header Connection "upgrade";
-
-      # Inject HTTP Basic auth so browser never sees 401.
-      proxy_set_header Authorization "Basic ${AUTH_B64}";
-    }
-  }
-}
-EOF
-
-log "[INFO] Starting nginx proxy on :${EXTERNAL_PORT}..."
-nginx -g 'daemon off;' >/var/log/nginx.log 2>&1 &
-
-# Final health check on nginx (external port)
-if command -v curl >/dev/null 2>&1; then
-  for i in {1..30}; do
-    if curl -sI "http://127.0.0.1:${EXTERNAL_PORT}/" >/dev/null 2>&1; then
-      log "[INFO] nginx is listening at http://127.0.0.1:${EXTERNAL_PORT}/"
-      break
-    fi
-    sleep 1
-  done
-fi
-
-log "[INFO] Ready. Use HA ingress (port ${EXTERNAL_PORT}) or http://[HOST]:${EXTERNAL_PORT}/"
+log "[INFO] Ready. Point your Cloudflare tunnel at port ${INTERNAL_PORT} on the host."
 
 # ---------- Keep container alive ----------
 shopt -s nullglob
-LOGS=(/var/log/kasmvncserver.log /root/.vnc/*.log /var/log/nginx.log)
+LOGS=(/var/log/kasmvncserver.log /root/.vnc/*.log)
 if (( ${#LOGS[@]} > 0 )); then
   log "[INFO] Tailing logs: ${LOGS[*]}"
   tail -F "${LOGS[@]}"
