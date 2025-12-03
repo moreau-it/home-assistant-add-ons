@@ -149,10 +149,6 @@ logging:
   level: 30
 
 data_loss_prevention:
-  visible_region:
-    concealed_region:
-      allow_click_down: false
-      allow_click_release: false
   clipboard:
     delay_between_operations: none
     allow_mimetypes:
@@ -209,7 +205,7 @@ server:
     httpd_directory: /usr/share/kasmvnc/www
   advanced:
     x_font_path: auto
-    # IMPORTANT: no kasm_password_file here → disables HTTP BasicAuth
+    # NOTE: no kasm_password_file here → HTTP BasicAuth disabled
     x_authority_file: auto
   auto_shutdown:
     no_user_session_timeout: never
