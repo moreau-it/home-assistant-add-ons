@@ -22,9 +22,6 @@ ports_description:
 
 # No ingress, no sidebar
 ingress: false
-panel_icon: "mdi:crosshairs-gps"
-panel_title: ""
-panel_admin: false
 
 devices:
   - /dev/ttyAMA0
