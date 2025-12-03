@@ -13,22 +13,22 @@ boot: auto
 init: false
 
 # -------------------------------------
-# ✅ Direct port for Cloudflare / browser
+# Direct port for Cloudflare / browser
 # -------------------------------------
 ports:
   "6901/tcp": 6901
 ports_description:
-  "6901/tcp": "KasmVNC HTTP/Websocket"
+  "6901/tcp": "KasmVNC Web Interface (HTTP/Websocket)"
 
 # -------------------------------------
-# ❌ Ingress is NOT used when exposing direct port
-#    Disable ingress to avoid HA rewriting URLs
+# Ingress disabled (required for direct access)
 # -------------------------------------
 ingress: false
 
-panel_title: "OpenCPN"
-panel_icon: "mdi:crosshairs-gps"
-panel_admin: false
+# -------------------------------------
+# Sidebar entries removed
+# (panel_title, panel_icon, panel_admin removed)
+# -------------------------------------
 
 devices:
   - /dev/ttyAMA0
