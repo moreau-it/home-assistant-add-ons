@@ -26,7 +26,7 @@ jq_get() {
   echo "$default"
 }
 
-log "[INFO] Starting OpenCPN Home Assistant add-on"
+log "[INFO] Starting OpenCPN Home Assistant add-on (FULL KIOSK MODE)"
 log "[DEBUG] Loading configuration from ${CONFIG_PATH}"
 
 # ---------- Read configuration ----------
@@ -61,26 +61,41 @@ log "[INFO] Ensuring DBus is running..."
 mkdir -p /var/run/dbus
 pgrep -x dbus-daemon >/dev/null 2>&1 || dbus-daemon --system --fork
 
-# ---------- KasmVNC auth (VNC user 'root') ----------
+# ---------- KasmVNC auth (VNC + HTTP Basic for user root) ----------
 log "[INFO] Setting KasmVNC password for user 'root'..."
 mkdir -p /root
 printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
 chmod 600 /root/.kasmpasswd || true
 
-# ---------- OpenCPN autostart in XFCE ----------
-log "[INFO] Configuring XFCE autostart for OpenCPN..."
-mkdir -p /root/.config/autostart
-cat >/root/.config/autostart/opencpn.desktop <<'EOF'
-[Desktop Entry]
-Type=Application
-Name=OpenCPN
-Exec=opencpn
-X-GNOME-Autostart-enabled=true
+# ---------- Kiosk xstartup (NO DESKTOP, ONLY OPENCPN) ----------
+log "[INFO] Configuring KasmVNC xstartup for OpenCPN kiosk..."
+mkdir -p /root/.vnc
+
+cat >/root/.vnc/xstartup <<'EOF'
+#!/bin/sh
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+# Solid background (optional)
+xsetroot -solid black
+
+# Hide cursor if unclutter is available
+if command -v unclutter >/dev/null 2>&1; then
+  unclutter -idle 0.1 -root &
+fi
+
+# Hard kiosk: keep restarting OpenCPN if it exits
+while true; do
+  opencpn --fullscreen
+  sleep 1
+done
 EOF
+
+chmod +x /root/.vnc/xstartup
 
 # ---------- KasmVNC YAML config ----------
 log "[INFO] Writing KasmVNC YAML config..."
-mkdir -p /etc/kasmvnc /root/.vnc
+mkdir -p /etc/kasmvnc
 
 cat >/etc/kasmvnc/kasmvnc.yaml <<EOF
 desktop:
@@ -194,6 +209,7 @@ server:
     httpd_directory: /usr/share/kasmvnc/www
   advanced:
     x_font_path: auto
+    kasm_password_file: /root/.kasmpasswd
     x_authority_file: auto
   auto_shutdown:
     no_user_session_timeout: never
@@ -208,7 +224,7 @@ cp /etc/kasmvnc/kasmvnc.yaml /root/.vnc/kasmvnc.yaml
 chmod 600 /etc/kasmvnc/kasmvnc.yaml || true
 
 # ---------- Start KasmVNC ----------
-log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth DISABLED, VNC password required)..."
+log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth ENABLED, full kiosk)..."
 
 # Best-effort cleanup, but do NOT block indefinitely if it hangs
 if command -v timeout >/dev/null 2>&1; then
@@ -218,9 +234,7 @@ else
 fi
 
 vncserver "${DISPLAY}" \
-  -select-de xfce \
   -geometry "${VNC_RESOLUTION}" \
-  -disableBasicAuth \
   >/var/log/kasmvncserver.log 2>&1 &
 
 # Wait for KasmVNC to listen on INTERNAL_PORT
@@ -234,7 +248,7 @@ if command -v curl >/dev/null 2>&1; then
   done
 fi
 
-log "[INFO] Ready. Point your browser / Cloudflare tunnel at port ${INTERNAL_PORT} on the host."
+log "[INFO] Ready. Point Cloudflare / browser at port ${INTERNAL_PORT} on the host."
 
 # ---------- Keep container alive ----------
 shopt -s nullglob
