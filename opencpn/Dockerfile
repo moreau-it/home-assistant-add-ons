@@ -55,8 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libtinyxml2.6.2v5 \
     # helpers
     perl libswitch-perl curl jq ca-certificates \
-    # nginx
-    nginx-light \
+
  && rm -rf /var/lib/apt/lists/* \
  && ldconfig
 
