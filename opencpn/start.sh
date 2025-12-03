@@ -9,7 +9,7 @@ DISPLAY="${DISPLAY:-:1}"
 VNC_RESOLUTION="${VNC_RESOLUTION:-1280x800}"
 
 # KasmVNC HTTP/Websocket port inside the container
-INTERNAL_PORT=6901
+INTERNAL_PORT=6080
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
 
