@@ -61,8 +61,8 @@ log "[INFO] Ensuring DBus is running..."
 mkdir -p /var/run/dbus
 pgrep -x dbus-daemon >/dev/null 2>&1 || dbus-daemon --system --fork
 
-# ---------- KasmVNC auth (VNC + HTTP Basic for user root) ----------
-log "[INFO] Setting KasmVNC password for user 'root'..."
+# ---------- KasmVNC auth (VNC password only; HTTP BasicAuth OFF) ----------
+log "[INFO] Setting KasmVNC password for user 'root' (VNC protocol)..."
 mkdir -p /root
 printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
 chmod 600 /root/.kasmpasswd || true
@@ -77,7 +77,7 @@ unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 
 # Solid background (optional)
-xsetroot -solid black
+xsetroot -solid black || true
 
 # Hide cursor if unclutter is available
 if command -v unclutter >/dev/null 2>&1; then
@@ -142,7 +142,7 @@ runtime_configuration:
     - data_loss_prevention.clipboard.server_to_client.primary_clipboard_enabled
     - data_loss_prevention.clipboard.client_to_server.size
     - data_loss_prevention.clipboard.server_to_client.size
-    
+
 logging:
   log_writer_name: all
   log_dest: logfile
@@ -209,7 +209,7 @@ server:
     httpd_directory: /usr/share/kasmvnc/www
   advanced:
     x_font_path: auto
-    kasm_password_file: /root/.kasmpasswd
+    # IMPORTANT: no kasm_password_file here → disables HTTP BasicAuth
     x_authority_file: auto
   auto_shutdown:
     no_user_session_timeout: never
@@ -224,7 +224,7 @@ cp /etc/kasmvnc/kasmvnc.yaml /root/.vnc/kasmvnc.yaml
 chmod 600 /etc/kasmvnc/kasmvnc.yaml || true
 
 # ---------- Start KasmVNC ----------
-log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth ENABLED, full kiosk)..."
+log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth DISABLED, full kiosk)..."
 
 # Best-effort cleanup, but do NOT block indefinitely if it hangs
 if command -v timeout >/dev/null 2>&1; then
@@ -235,6 +235,7 @@ fi
 
 vncserver "${DISPLAY}" \
   -geometry "${VNC_RESOLUTION}" \
+  -disableBasicAuth \
   >/var/log/kasmvncserver.log 2>&1 &
 
 # Wait for KasmVNC to listen on INTERNAL_PORT
