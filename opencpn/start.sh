@@ -61,7 +61,7 @@ log "[INFO] Ensuring DBus is running..."
 mkdir -p /var/run/dbus
 pgrep -x dbus-daemon >/dev/null 2>&1 || dbus-daemon --system --fork
 
-# ---------- KasmVNC auth (VNC + HTTP Basic for user root) ----------
+# ---------- KasmVNC auth (VNC user 'root') ----------
 log "[INFO] Setting KasmVNC password for user 'root'..."
 mkdir -p /root
 printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
@@ -194,7 +194,6 @@ server:
     httpd_directory: /usr/share/kasmvnc/www
   advanced:
     x_font_path: auto
-    kasm_password_file: /root/.kasmpasswd
     x_authority_file: auto
   auto_shutdown:
     no_user_session_timeout: never
@@ -209,7 +208,7 @@ cp /etc/kasmvnc/kasmvnc.yaml /root/.vnc/kasmvnc.yaml
 chmod 600 /etc/kasmvnc/kasmvnc.yaml || true
 
 # ---------- Start KasmVNC ----------
-log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth ENABLED)..."
+log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth DISABLED, VNC password required)..."
 
 # Best-effort cleanup, but do NOT block indefinitely if it hangs
 if command -v timeout >/dev/null 2>&1; then
@@ -221,6 +220,7 @@ fi
 vncserver "${DISPLAY}" \
   -select-de xfce \
   -geometry "${VNC_RESOLUTION}" \
+  -disableBasicAuth \
   >/var/log/kasmvncserver.log 2>&1 &
 
 # Wait for KasmVNC to listen on INTERNAL_PORT
@@ -234,7 +234,7 @@ if command -v curl >/dev/null 2>&1; then
   done
 fi
 
-log "[INFO] Ready. Point your Cloudflare tunnel at port ${INTERNAL_PORT} on the host."
+log "[INFO] Ready. Point your browser / Cloudflare tunnel at port ${INTERNAL_PORT} on the host."
 
 # ---------- Keep container alive ----------
 shopt -s nullglob
