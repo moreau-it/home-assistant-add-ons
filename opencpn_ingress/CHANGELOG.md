@@ -2,14 +2,6 @@
 
 - Updates
 
-## 0.9.0
-
-- First stable version
-
-## 0.5.0
-
-- build dockerfile based on OpenCPN 5.12.0
-
 ## 0.0.1
 
 - Work in progress
