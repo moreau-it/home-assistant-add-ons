@@ -39,16 +39,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN update-ca-certificates
 
-# Clone OpenCPN source
+# 1) Clone OpenCPN (equivalent to having an OpenCPN source tree)
 RUN git clone --depth=1 https://github.com/OpenCPN/OpenCPN.git .
 
-# 👉 Add osm_pi plugin into the OpenCPN plugins tree
-# According to osm_pi's README, just cloning into the plugin dir and rebuilding is enough.
-# plugins/CMakeLists.txt will pick up any *_pi directory automatically.
-RUN git clone --depth=1 https://github.com/ktec/osm_pi.git plugins/osm_pi
+# 2) Go to plugins/ and clone osm_pi (README step: "go to the plugin subdirectory…")
+RUN cd /src/plugins \
+ && git clone --depth=1 https://github.com/ktec/osm_pi.git
 
+# 3) Make CMake actually build this plugin
+#    (OpenCPN doesn’t auto-scan; we must add add_subdirectory(osm_pi))
+RUN cd /src/plugins \
+ && sed -i '/add_subdirectory(grib_pi)/a add_subdirectory(osm_pi)' CMakeLists.txt
 
-# Build & install OpenCPN
+# 4) Build & install OpenCPN (README: "cd ..; cd build; cmake ..; cmake --build .")
 RUN mkdir build && cd build && \
     cmake .. \
       -DCMAKE_BUILD_TYPE=Release \

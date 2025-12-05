@@ -15,6 +15,7 @@ init: false
 # NO direct ports, ingress only
 ingress: true
 ingress_port: 6080 # <—— MUST point at nginx, not KasmVNC
+ingress_entry: /vnc.html
 panel_icon: mdi:ship-wheel
 panel_title: OpenCPN
 panel_admin: false
