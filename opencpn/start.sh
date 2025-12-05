@@ -26,7 +26,7 @@ jq_get() {
   echo "$default"
 }
 
-log "[INFO] Starting OpenCPN Home Assistant add-on (FULL KIOSK MODE, no HTTP BasicAuth)"
+log "[INFO] Starting OpenCPN Home Assistant add-on (XFCE + fullscreen OpenCPN, no HTTP BasicAuth)"
 log "[DEBUG] Loading configuration from ${CONFIG_PATH}"
 
 # ---------- Read configuration ----------
@@ -34,8 +34,6 @@ VNC_PASSWORD="${VNC_PASSWORD:-$(jq_get '.vnc_password' '')}"
 
 # ---------- Password handling ----------
 if [[ -z "${VNC_PASSWORD:-}" ]]; then
-  # We still keep a VNC password (HTML login page) for safety,
-  # but HTTP BasicAuth is disabled so there is no 401 pop-up.
   VNC_PASSWORD="opencpn"
   log "[WARN] No vnc_password set; using default 'opencpn'"
 fi
@@ -56,8 +54,20 @@ mkdir -p /root
 printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
 chmod 600 /root/.kasmpasswd || true
 
-# ---------- Kiosk xstartup (NO DESKTOP, ONLY OPENCPN) ----------
-log "[INFO] Configuring KasmVNC xstartup for OpenCPN kiosk..."
+# ---------- XFCE autostart: OpenCPN fullscreen ----------
+log "[INFO] Configuring XFCE autostart for OpenCPN..."
+mkdir -p /root/.config/autostart
+
+cat >/root/.config/autostart/opencpn.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=OpenCPN
+Exec=opencpn --fullscreen
+X-GNOME-Autostart-enabled=true
+EOF
+
+# ---------- xstartup: start full XFCE session ----------
+log "[INFO] Writing .vnc/xstartup for XFCE session..."
 mkdir -p /root/.vnc
 
 cat >/root/.vnc/xstartup <<'EOF'
@@ -65,19 +75,21 @@ cat >/root/.vnc/xstartup <<'EOF'
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 
-# Simple solid background
+# Load X resources if present
+if [ -r "$HOME/.Xresources" ]; then
+  xrdb "$HOME/.Xresources"
+fi
+
+# Optional: simple background
 xsetroot -solid black
 
-# Hide cursor when idle, if available
+# Optional: hide cursor when idle, if available
 if command -v unclutter >/dev/null 2>&1; then
   unclutter -idle 0.1 -root &
 fi
 
-# Hard kiosk: keep restarting OpenCPN if it exits
-while true; do
-  opencpn --fullscreen
-  sleep 1
-done
+# Start XFCE session (this will also run autostart apps, including OpenCPN)
+exec startxfce4
 EOF
 
 chmod +x /root/.vnc/xstartup
@@ -138,7 +150,7 @@ logging:
   level: 30
 
 data_loss_prevention:
-  # Keep everything interactive; DO NOT block clicks/keyboard.
+  # keep everything interactive; do not block clicks or keyboard
   clipboard:
     delay_between_operations: none
     allow_mimetypes:
@@ -210,9 +222,9 @@ cp /etc/kasmvnc/kasmvnc.yaml /root/.vnc/kasmvnc.yaml
 chmod 600 /etc/kasmvnc/kasmvnc.yaml || true
 
 # ---------- Start KasmVNC ----------
-log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth DISABLED, kiosk)..."
+log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth DISABLED, XFCE + fullscreen OpenCPN)..."
 
-# Best-effort cleanup, but do NOT block indefinitely if it hangs
+# Best-effort cleanup
 if command -v timeout >/dev/null 2>&1; then
   timeout 3 vncserver -kill "${DISPLAY}" >/dev/null 2>&1 || true
 else
@@ -220,6 +232,7 @@ else
 fi
 
 vncserver "${DISPLAY}" \
+  -select-de xfce \
   -geometry "${VNC_RESOLUTION}" \
   -disableBasicAuth \
   >/var/log/kasmvncserver.log 2>&1 &
