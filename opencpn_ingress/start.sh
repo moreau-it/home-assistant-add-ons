@@ -36,6 +36,9 @@ VNC_PASSWORD="${VNC_PASSWORD:-$(jq_get '.vnc_password' '')}"
 INSECURE_MODE_RAW="${INSECURE_MODE:-$(jq_get '.insecure_mode' 'false')}"
 INSECURE_MODE="$(echo "$INSECURE_MODE_RAW" | tr '[:upper:]' '[:lower:]')"
 
+# ---------- Precompute Basic Auth header for KasmVNC ----------
+BASIC_AUTH_B64="$(printf 'root:%s' "$VNC_PASSWORD" | base64 | tr -d '\n')"
+
 # ---------- Password handling ----------
 if [[ -z "${VNC_PASSWORD:-}" ]]; then
   if [[ "$INSECURE_MODE" == "true" ]]; then
@@ -249,7 +252,7 @@ if command -v curl >/dev/null 2>&1; then
 fi
 
 # ---------- nginx as auth-injecting proxy for ingress ----------
-cat >/etc/nginx/nginx.conf <<'EOF'
+cat >/etc/nginx/nginx.conf <<EOF
 worker_processes auto;
 
 error_log  /var/log/nginx/error.log debug;
@@ -260,19 +263,19 @@ http {
   include       mime.types;
   default_type  application/octet-stream;
 
-  # ---------- Custom detailed log format ----------
+  # ---------- Detailed log format ----------
   log_format detailed
-    '$remote_addr - $remote_user [$time_local] '
-    '"$request" $status $body_bytes_sent '
-    'upstream_status=$upstream_status '
-    'ref="$http_referer" ua="$http_user_agent" '
-    'upgrade="$http_upgrade" connection="$connection_upgrade" '
-    'rt=$request_time urt=$upstream_response_time';
+    '\$remote_addr - \$remote_user [\$time_local] '
+    '"\$request" \$status \$body_bytes_sent '
+    'upstream_status=\$upstream_status '
+    'ref="\$http_referer" ua="\$http_user_agent" '
+    'upgrade="\$http_upgrade" connection="\$connection_upgrade" '
+    'rt=\$request_time urt=\$upstream_response_time';
 
   access_log /var/log/nginx/access.log detailed;
 
-  # ---------- WebSocket Upgrade Helper ----------
-  map $http_upgrade $connection_upgrade {
+  # WebSocket Upgrade helper
+  map \$http_upgrade \$connection_upgrade {
     default upgrade;
     ''      close;
   }
@@ -280,36 +283,38 @@ http {
   server {
     listen 6080;
 
-    # Log everything for this server
     access_log /var/log/nginx/access.log detailed;
     error_log  /var/log/nginx/error.log notice;
 
-    # / → /vnc.html
+    # / -> /vnc.html so ingress just asks for the app
     location = / {
       return 302 /vnc.html;
     }
 
-    # ---------- Main proxying to KasmVNC ----------
+    # Main proxy: inject Basic Auth towards KasmVNC
     location / {
-      proxy_pass http://127.0.0.1:6901;
+      proxy_pass http://127.0.0.1:${INTERNAL_PORT};
 
       proxy_http_version 1.1;
 
-      proxy_set_header Host $host;
-      proxy_set_header X-Real-IP $remote_addr;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header Host \$host;
+      proxy_set_header X-Real-IP \$remote_addr;
+      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto \$scheme;
 
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_set_header Connection $connection_upgrade;
+      proxy_set_header Upgrade \$http_upgrade;
+      proxy_set_header Connection \$connection_upgrade;
 
       proxy_read_timeout 3600s;
       proxy_send_timeout 3600s;
       proxy_connect_timeout 60s;
 
-      # More debug
-      proxy_set_header X-Debug-Ingress-Path $request_uri;
-      proxy_set_header X-Debug-Upgrade $http_upgrade;
+      # *** KEY PART: inject Basic header towards KasmVNC ***
+      proxy_set_header Authorization "Basic ${BASIC_AUTH_B64}";
+
+      # Debug headers so we can see ingress behaviour
+      proxy_set_header X-Debug-Ingress-Path \$request_uri;
+      proxy_set_header X-Debug-Upgrade \$http_upgrade;
     }
   }
 }
