@@ -8,9 +8,9 @@ CONFIG_PATH="/data/options.json"
 DISPLAY="${DISPLAY:-:1}"
 VNC_RESOLUTION="${VNC_RESOLUTION:-1280x800}"
 
-# KasmVNC HTTP/Websocket port *inside* the container
+# Internal KasmVNC HTTP/Websocket port
 INTERNAL_PORT=6901
-# nginx (ingress) port inside the container
+# Port nginx listens on for HA ingress (must match ingress_port in config.yaml)
 EXTERNAL_PORT=6080
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
@@ -32,16 +32,9 @@ log "[INFO] Starting OpenCPN (INGRESS MODE with nginx + KasmVNC)"
 log "[DEBUG] Loading configuration from ${CONFIG_PATH}"
 
 # ---------- Read configuration ----------
-VNC_PASSWORD="$(jq_get '.vnc_password' '')"
-INSECURE_MODE_RAW="$(jq_get '.insecure_mode' 'false')"
+VNC_PASSWORD="${VNC_PASSWORD:-$(jq_get '.vnc_password' '')}"
+INSECURE_MODE_RAW="${INSECURE_MODE:-$(jq_get '.insecure_mode' 'false')}"
 INSECURE_MODE="$(echo "$INSECURE_MODE_RAW" | tr '[:upper:]' '[:lower:]')"
-
-# ---------- Sanity checks ----------
-command -v vncserver     >/dev/null 2>&1 || { log "[ERROR] 'vncserver' (KasmVNC) not found"; exit 1; }
-command -v kasmvncpasswd >/dev/null 2>&1 || { log "[ERROR] 'kasmvncpasswd' not found"; exit 1; }
-command -v nginx         >/dev/null 2>&1 || { log "[ERROR] 'nginx' not found"; exit 1; }
-command -v jq            >/dev/null 2>&1 || log "[WARN] 'jq' not found; options.json parsing may be limited."
-command -v curl          >/dev/null 2>&1 || log "[WARN] 'curl' not found; HTTP health checks will be skipped."
 
 # ---------- Password handling ----------
 if [[ -z "${VNC_PASSWORD:-}" ]]; then
@@ -59,42 +52,45 @@ log "[DEBUG] display='${DISPLAY}', resolution='${VNC_RESOLUTION}'"
 log "[DEBUG] insecure_mode='${INSECURE_MODE}', vnc_password='${MASKED}'"
 log "[DEBUG] internal_port='${INTERNAL_PORT}', external_port='${EXTERNAL_PORT}'"
 
+# ---------- Sanity checks ----------
+command -v vncserver     >/dev/null 2>&1 || { log "[ERROR] 'vncserver' (KasmVNC) not found"; exit 1; }
+command -v kasmvncpasswd >/dev/null 2>&1 || { log "[ERROR] 'kasmvncpasswd' not found"; exit 1; }
+command -v nginx         >/dev/null 2>&1 || { log "[ERROR] 'nginx' not found"; exit 1; }
+command -v jq            >/dev/null 2>&1 || log "[WARN] 'jq' not found; options.json parsing may be limited."
+command -v curl          >/dev/null 2>&1 || log "[WARN] 'curl' not found; HTTP health checks will be skipped."
+
 # ---------- DBus ----------
 log "[INFO] Ensuring DBus is running..."
 mkdir -p /var/run/dbus
 pgrep -x dbus-daemon >/dev/null 2>&1 || dbus-daemon --system --fork
 
-# ---------- KasmVNC auth (HTTP Basic + VNC for user 'root') ----------
+# ---------- KasmVNC auth (VNC + HTTP Basic for user root) ----------
 log "[INFO] Setting KasmVNC password for user 'root'..."
 mkdir -p /root
 printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
 chmod 600 /root/.kasmpasswd || true
 
-# ---------- XFCE + OpenCPN autostart ----------
-log "[INFO] Configuring XFCE autostart for OpenCPN..."
-mkdir -p /root/.config/autostart
-cat >/root/.config/autostart/opencpn.desktop <<'EOF'
-[Desktop Entry]
-Type=Application
-Name=OpenCPN
-Exec=opencpn --fullscreen
-X-GNOME-Autostart-enabled=true
-EOF
-
+# ---------- XFCE desktop session + OpenCPN autostart ----------
 log "[INFO] Writing KasmVNC xstartup (XFCE session)..."
 mkdir -p /root/.vnc
+
 cat >/root/.vnc/xstartup <<'EOF'
 #!/bin/sh
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 
-# Prevent screen blanking
-xset -dpms
-xset s off
-xset s noblank
+xrdb "$HOME/.Xresources" >/dev/null 2>&1 || true
 
-exec xfce4-session
+# Start the full XFCE session
+startxfce4 &
+
+# Small delay so panel appears first
+sleep 2
+
+# Auto-start OpenCPN in normal windowed mode (user can resize/fullscreen)
+opencpn &
 EOF
+
 chmod +x /root/.vnc/xstartup
 
 # ---------- KasmVNC YAML config ----------
@@ -230,7 +226,7 @@ chmod 600 /etc/kasmvnc/kasmvnc.yaml || true
 # ---------- Start KasmVNC ----------
 log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth ENABLED)..."
 
-# Best-effort cleanup
+# Best-effort cleanup, but do NOT block indefinitely if it hangs
 if command -v timeout >/dev/null 2>&1; then
   timeout 3 vncserver -kill "${DISPLAY}" >/dev/null 2>&1 || true
 else
@@ -238,7 +234,6 @@ else
 fi
 
 vncserver "${DISPLAY}" \
-  -select-de xfce \
   -geometry "${VNC_RESOLUTION}" \
   >/var/log/kasmvncserver.log 2>&1 &
 
@@ -262,23 +257,35 @@ cat >/etc/nginx/nginx.conf <<EOF
 events {}
 
 http {
+  # Needed for WebSocket Upgrade header handling
+  map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    ''      close;
+  }
+
   server {
     listen ${EXTERNAL_PORT};
 
+    # Home Assistant ingress hits "/" – send it to the viewer UI
     location / {
-      # When HA ingress hits "/", send it to the Kasm UI page.
-      rewrite ^/$ /vnc.html break;
+      rewrite ^/\$ /vnc.html break;
 
       proxy_pass http://127.0.0.1:${INTERNAL_PORT};
       proxy_http_version 1.1;
+
       proxy_set_header Host \$host;
       proxy_set_header X-Real-IP \$remote_addr;
       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-      proxy_set_header Upgrade \$http_upgrade;
-      proxy_set_header Connection "upgrade";
+      proxy_set_header X-Forwarded-Proto \$scheme;
 
-      # Inject Basic Auth for KasmVNC
+      proxy_set_header Upgrade \$http_upgrade;
+      proxy_set_header Connection \$connection_upgrade;
+
+      # Inject HTTP BasicAuth towards KasmVNC
       proxy_set_header Authorization "Basic ${AUTH_B64}";
+
+      # Do not forward WWW-Authenticate back to HA, even if Kasm sends 401
+      proxy_hide_header WWW-Authenticate;
     }
   }
 }
@@ -287,7 +294,7 @@ EOF
 log "[INFO] Starting nginx proxy on :${EXTERNAL_PORT}..."
 nginx -g 'daemon off;' >/var/log/nginx.log 2>&1 &
 
-# Final health check on nginx (EXTERNAL_PORT)
+# Final health check on nginx (EXTERNAL_PORT, through the proxy)
 if command -v curl >/dev/null 2>&1; then
   for i in {1..30}; do
     if curl -sI "http://127.0.0.1:${EXTERNAL_PORT}/" >/dev/null 2>&1; then
@@ -298,7 +305,7 @@ if command -v curl >/dev/null 2>&1; then
   done
 fi
 
-log "[INFO] Ready. Use HA ingress; no direct ports exposed."
+log "[INFO] Ready. Use Home Assistant ingress; no direct ports exposed."
 
 # ---------- Keep container alive ----------
 shopt -s nullglob
