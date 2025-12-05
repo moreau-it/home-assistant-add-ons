@@ -1,6 +1,9 @@
 #!/bin/bash
 set -Eeuo pipefail
 
+# ---------- Add-on version tag ----------
+ADDON_VERSION="kiosk-no-httpauth-2025-12-03-01"
+
 # ---------- Paths & defaults ----------
 export PATH="/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
 CONFIG_PATH="/data/options.json"
@@ -25,31 +28,6 @@ jq_get() {
   fi
   echo "$default"
 }
-
-log "[INFO] Starting OpenCPN Home Assistant add-on (FULL KIOSK MODE, HTTP BasicAuth DISABLED)"
-log "[DEBUG] Loading configuration from ${CONFIG_PATH}"
-
-# ---------- Read configuration ----------
-VNC_PASSWORD="${VNC_PASSWORD:-$(jq_get '.vnc_password' '')}"
-INSECURE_MODE_RAW="${INSECURE_MODE:-$(jq_get '.insecure_mode' 'false')}"
-INSECURE_MODE="$(echo "$INSECURE_MODE_RAW" | tr '[:upper:]' '[:lower:]')"
-
-# ---------- Sanity checks ----------
-command -v vncserver     >/dev/null 2>&1 || { log "[ERROR] 'vncserver' (KasmVNC) not found"; exit 1; }
-command -v kasmvncpasswd >/dev/null 2>&1 || { log "[ERROR] 'kasmvncpasswd' not found"; exit 1; }
-command -v jq            >/dev/null 2>&1 || log "[WARN] 'jq' not found; options.json parsing may be limited."
-command -v curl          >/dev/null 2>&1 || log "[WARN] 'curl' not found; HTTP health checks will be skipped."
-
-# ---------- Password handling (for VNC handshake only) ----------
-if [[ -z "${VNC_PASSWORD:-}" ]]; then
-  if [[ "$INSECURE_MODE" == "true" ]]; then
-    VNC_PASSWORD="opencpn"
-    log "[WARN] insecure_mode=true and no vnc_password set; using default 'opencpn'"
-  else
-    log "[ERROR] No VNC password set. Set 'vnc_password' in options.json or enable insecure_mode."
-    exit 1
-  fi
-fi
 
 MASKED="******"
 log "[DEBUG] display='${DISPLAY}', resolution='${VNC_RESOLUTION}'"
