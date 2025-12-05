@@ -26,7 +26,7 @@ jq_get() {
   echo "$default"
 }
 
-log "[INFO] Starting OpenCPN Home Assistant add-on (FULL KIOSK MODE)"
+log "[INFO] Starting OpenCPN Home Assistant add-on (FULL KIOSK MODE, HTTP BasicAuth DISABLED)"
 log "[DEBUG] Loading configuration from ${CONFIG_PATH}"
 
 # ---------- Read configuration ----------
@@ -40,7 +40,7 @@ command -v kasmvncpasswd >/dev/null 2>&1 || { log "[ERROR] 'kasmvncpasswd' not f
 command -v jq            >/dev/null 2>&1 || log "[WARN] 'jq' not found; options.json parsing may be limited."
 command -v curl          >/dev/null 2>&1 || log "[WARN] 'curl' not found; HTTP health checks will be skipped."
 
-# ---------- Password handling ----------
+# ---------- Password handling (for VNC handshake only) ----------
 if [[ -z "${VNC_PASSWORD:-}" ]]; then
   if [[ "$INSECURE_MODE" == "true" ]]; then
     VNC_PASSWORD="opencpn"
@@ -61,8 +61,8 @@ log "[INFO] Ensuring DBus is running..."
 mkdir -p /var/run/dbus
 pgrep -x dbus-daemon >/dev/null 2>&1 || dbus-daemon --system --fork
 
-# ---------- KasmVNC auth (VNC password only; HTTP BasicAuth OFF) ----------
-log "[INFO] Setting KasmVNC password for user 'root' (VNC protocol)..."
+# ---------- KasmVNC auth (VNC password, NOT HTTP Basic) ----------
+log "[INFO] Setting KasmVNC password for user 'root' (VNC only, no HTTP Basic)..."
 mkdir -p /root
 printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
 chmod 600 /root/.kasmpasswd || true
@@ -94,7 +94,7 @@ EOF
 chmod +x /root/.vnc/xstartup
 
 # ---------- KasmVNC YAML config ----------
-log "[INFO] Writing KasmVNC YAML config..."
+log "[INFO] Writing KasmVNC YAML config (HTTP BasicAuth DISABLED)..."
 mkdir -p /etc/kasmvnc
 
 cat >/etc/kasmvnc/kasmvnc.yaml <<EOF
@@ -142,13 +142,17 @@ runtime_configuration:
     - data_loss_prevention.clipboard.server_to_client.primary_clipboard_enabled
     - data_loss_prevention.clipboard.client_to_server.size
     - data_loss_prevention.clipboard.server_to_client.size
-
+    
 logging:
   log_writer_name: all
   log_dest: logfile
   level: 30
 
 data_loss_prevention:
+  visible_region:
+    concealed_region:
+      allow_click_down: false
+      allow_click_release: false
   clipboard:
     delay_between_operations: none
     allow_mimetypes:
@@ -205,7 +209,7 @@ server:
     httpd_directory: /usr/share/kasmvnc/www
   advanced:
     x_font_path: auto
-    # NOTE: no kasm_password_file here → HTTP BasicAuth disabled
+    # IMPORTANT: NO kasm_password_file HERE -> no HTTP BasicAuth
     x_authority_file: auto
   auto_shutdown:
     no_user_session_timeout: never
