@@ -249,43 +249,67 @@ if command -v curl >/dev/null 2>&1; then
 fi
 
 # ---------- nginx as auth-injecting proxy for ingress ----------
-log "[INFO] Writing nginx config..."
+cat >/etc/nginx/nginx.conf <<'EOF'
+worker_processes auto;
 
-AUTH_B64="$(printf 'root:%s' "$VNC_PASSWORD" | base64 | tr -d '\n')"
+error_log  /var/log/nginx/error.log debug;
 
-cat >/etc/nginx/nginx.conf <<EOF
 events {}
 
 http {
-  # Needed for WebSocket Upgrade header handling
-  map \$http_upgrade \$connection_upgrade {
+  include       mime.types;
+  default_type  application/octet-stream;
+
+  # ---------- Custom detailed log format ----------
+  log_format detailed
+    '$remote_addr - $remote_user [$time_local] '
+    '"$request" $status $body_bytes_sent '
+    'upstream_status=$upstream_status '
+    'ref="$http_referer" ua="$http_user_agent" '
+    'upgrade="$http_upgrade" connection="$connection_upgrade" '
+    'rt=$request_time urt=$upstream_response_time';
+
+  access_log /var/log/nginx/access.log detailed;
+
+  # ---------- WebSocket Upgrade Helper ----------
+  map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      close;
   }
 
   server {
-    listen ${EXTERNAL_PORT};
+    listen 6080;
 
-    # Home Assistant ingress hits "/" – send it to the viewer UI
+    # Log everything for this server
+    access_log /var/log/nginx/access.log detailed;
+    error_log  /var/log/nginx/error.log notice;
+
+    # / → /vnc.html
+    location = / {
+      return 302 /vnc.html;
+    }
+
+    # ---------- Main proxying to KasmVNC ----------
     location / {
-      rewrite ^/\$ /vnc.html break;
+      proxy_pass http://127.0.0.1:6901;
 
-      proxy_pass http://127.0.0.1:${INTERNAL_PORT};
       proxy_http_version 1.1;
 
-      proxy_set_header Host \$host;
-      proxy_set_header X-Real-IP \$remote_addr;
-      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-      proxy_set_header X-Forwarded-Proto \$scheme;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
 
-      proxy_set_header Upgrade \$http_upgrade;
-      proxy_set_header Connection \$connection_upgrade;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
 
-      # Inject HTTP BasicAuth towards KasmVNC
-      proxy_set_header Authorization "Basic ${AUTH_B64}";
+      proxy_read_timeout 3600s;
+      proxy_send_timeout 3600s;
+      proxy_connect_timeout 60s;
 
-      # Do not forward WWW-Authenticate back to HA, even if Kasm sends 401
-      proxy_hide_header WWW-Authenticate;
+      # More debug
+      proxy_set_header X-Debug-Ingress-Path $request_uri;
+      proxy_set_header X-Debug-Upgrade $http_upgrade;
     }
   }
 }
@@ -309,7 +333,13 @@ log "[INFO] Ready. Use Home Assistant ingress; no direct ports exposed."
 
 # ---------- Keep container alive ----------
 shopt -s nullglob
-LOGS=(/var/log/kasmvncserver.log /root/.vnc/*.log /var/log/nginx.log)
+LOGS=(
+  /var/log/kasmvncserver.log
+  /root/.vnc/*.log
+  /var/log/nginx/access.log
+  /var/log/nginx/error.log
+)
+
 if (( ${#LOGS[@]} > 0 )); then
   log "[INFO] Tailing logs: ${LOGS[*]}"
   tail -F "${LOGS[@]}"

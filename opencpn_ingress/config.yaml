@@ -10,39 +10,28 @@ arch:
   - armv7
 
 startup: services
-boot: auto
 init: false
 
+# NO direct ports, ingress only
 ingress: true
-ingress_port: 6080
-
-panel_title: "OpenCPN"
-panel_icon: "mdi:crosshairs-gps"
+ingress_port: 6080 # <—— MUST point at nginx, not KasmVNC
+panel_icon: mdi:ship-wheel
+panel_title: OpenCPN
 panel_admin: false
 
-devices:
-  - /dev/ttyAMA0
-  - /dev/ttyUSB0
-  - /dev/hidraw0
-  - /dev/hidraw1
+# No 'ports:' section at all for this fork
+# network: {} is fine, or omit it entirely
 
-udev: true
-stdin: true
-tty: true
-
+homeassistant_api: false
+hassio_role: default
 privileged:
   - SYS_ADMIN
-  - NET_ADMIN
-  - SYS_RAWIO
-
-map:
-  - share:rw
-  - config:rw
+  - DAC_READ_SEARCH
 
 options:
   vnc_password: "ChangeMe123"
   insecure_mode: true
 
 schema:
-  vnc_password: password?
+  vnc_password: str
   insecure_mode: bool
