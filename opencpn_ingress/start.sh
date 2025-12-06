@@ -206,18 +206,12 @@ encoding:
 
 server:
   http:
-    headers:
-      - Cross-Origin-Embedder-Policy=require-corp
-      - Cross-Origin-Opener-Policy=same-origin
+    # No COEP/COOP here – let Home Assistant control embedding
     httpd_directory: /usr/share/kasmvnc/www
   advanced:
     x_font_path: auto
-    kasm_password_file: /root/.kasmpasswd
+    # IMPORTANT: no kasm_password_file here → no HTTP Basic
     x_authority_file: auto
-  auto_shutdown:
-    no_user_session_timeout: never
-    active_user_session_timeout: never
-    inactive_user_session_timeout: never
 
 command_line:
   prompt: false
@@ -254,71 +248,60 @@ if command -v curl >/dev/null 2>&1; then
 fi
 
 # ---------- nginx as auth-injecting proxy for ingress ----------
-cat >/etc/nginx/nginx.conf <<EOF
-worker_processes auto;
+cat >/etc/nginx/nginx.conf <<'EOF'
+worker_processes  1;
 
-error_log  /var/log/nginx/error.log debug;
-
-events {}
+events {
+    worker_connections  1024;
+}
 
 http {
-  include       mime.types;
-  default_type  application/octet-stream;
+    include       mime.types;
+    default_type  application/octet-stream;
 
-  # ---------- Detailed log format ----------
-  log_format detailed
-    '\$remote_addr - \$remote_user [\$time_local] '
-    '"\$request" \$status \$body_bytes_sent '
-    'upstream_status=\$upstream_status '
-    'ref="\$http_referer" ua="\$http_user_agent" '
-    'upgrade="\$http_upgrade" connection="\$connection_upgrade" '
-    'rt=\$request_time urt=\$upstream_response_time';
+    sendfile        on;
+    keepalive_timeout  65;
 
-  access_log /var/log/nginx/access.log detailed;
+    # For debugging ingress issues
+    log_format  main  '$remote_addr - $remote_user [$time_local] '
+                      '"$request" $status $body_bytes_sent '
+                      'upstream_status=$upstream_status ref="$http_referer" '
+                      'ua="$http_user_agent" upgrade="$http_upgrade" '
+                      'connection="$connection" rt=$request_time urt=$upstream_response_time';
 
-  # WebSocket Upgrade helper
-  map \$http_upgrade \$connection_upgrade {
-    default upgrade;
-    ''      close;
-  }
+    access_log  /var/log/nginx/access.log  main;
+    error_log   /var/log/nginx/error.log   debug;
 
-  server {
-    listen 6080;
-
-    access_log /var/log/nginx/access.log detailed;
-    error_log  /var/log/nginx/error.log notice;
-
-    # / -> /vnc.html so ingress just asks for the app
-    location = / {
-      return 302 /vnc.html;
+    # Needed for Upgrade/Connection mapping
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ''      close;
     }
 
-    # Main proxy: inject Basic Auth towards KasmVNC
-    location / {
-      proxy_pass http://127.0.0.1:${INTERNAL_PORT};
-
-      proxy_http_version 1.1;
-
-      proxy_set_header Host \$host;
-      proxy_set_header X-Real-IP \$remote_addr;
-      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-      proxy_set_header X-Forwarded-Proto \$scheme;
-
-      proxy_set_header Upgrade \$http_upgrade;
-      proxy_set_header Connection \$connection_upgrade;
-
-      proxy_read_timeout 3600s;
-      proxy_send_timeout 3600s;
-      proxy_connect_timeout 60s;
-
-      # *** KEY PART: inject Basic header towards KasmVNC ***
-      proxy_set_header Authorization "Basic ${BASIC_AUTH_B64}";
-
-      # Debug headers so we can see ingress behaviour
-      proxy_set_header X-Debug-Ingress-Path \$request_uri;
-      proxy_set_header X-Debug-Upgrade \$http_upgrade;
+    upstream kasmvnc {
+        server 127.0.0.1:6901;
     }
-  }
+
+    server {
+        listen 6080;
+        server_name _;
+
+        # All HTTP (HTML/JS/CSS) and WebSocket to KasmVNC
+        location / {
+            proxy_pass         http://kasmvnc;
+            proxy_http_version 1.1;
+
+            proxy_set_header Host              $host;
+            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            proxy_set_header Upgrade    $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+
+            proxy_read_timeout 86400;
+        }
+    }
 }
 EOF
 

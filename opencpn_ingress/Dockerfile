@@ -106,6 +106,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # nginx for reverse proxy
     xfce4 xfce4-goodies xfce4-session \
     dbus dbus-x11 x11-xserver-utils xauth \
+    wget \
     nginx \
     curl jq ca-certificates \
  && rm -rf /var/lib/apt/lists/* && \
