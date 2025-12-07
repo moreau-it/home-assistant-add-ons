@@ -1,5 +1,5 @@
 name: "OpenCPN (Ingress)"
-version: "0.1.4"
+version: "0.1.5"
 slug: "opencpn_ingress"
 description: "OpenCPN via KasmVNC, exposed only through Home Assistant ingress"
 url: "https://github.com/moreau-it/home-assistant-add-ons"
