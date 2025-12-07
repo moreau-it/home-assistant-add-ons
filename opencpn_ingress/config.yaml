@@ -2,7 +2,6 @@ name: "OpenCPN (Ingress)"
 version: "0.1.4"
 slug: "opencpn_ingress"
 description: "OpenCPN via KasmVNC, exposed only through Home Assistant ingress"
-
 url: "https://github.com/moreau-it/home-assistant-add-ons"
 
 arch:
@@ -13,10 +12,9 @@ arch:
 startup: services
 init: false
 
-# Ingress-only, no direct ports
 ingress: true
-ingress_port: 8099 # or 6080, but pick one and match EXTERNAL_PORT
-ingress_entry: / # now that nginx handles root, / is fine
+ingress_port: 8099 # ← nginx listens here
+# ingress_entry omitted → HA will use /
 
 panel_icon: mdi:ship-wheel
 panel_title: OpenCPN
@@ -24,7 +22,6 @@ panel_admin: false
 
 homeassistant_api: false
 hassio_role: default
-
 privileged:
   - SYS_ADMIN
   - DAC_READ_SEARCH

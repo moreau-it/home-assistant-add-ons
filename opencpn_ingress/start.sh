@@ -1,17 +1,15 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-# ---------- Paths & defaults ----------
 export PATH="/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
 CONFIG_PATH="/data/options.json"
 
 DISPLAY="${DISPLAY:-:1}"
 VNC_RESOLUTION="${VNC_RESOLUTION:-1280x800}"
 
-# KasmVNC HTTP/WebSocket port inside the container
+# KasmVNC HTTP/WebSocket inside the container
 INTERNAL_PORT=6901
-
-# nginx port (must match ingress_port in config.yaml)
+# nginx port exposed to Home Assistant ingress
 NGINX_PORT=8099
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
@@ -33,22 +31,20 @@ log "[INFO] Starting OpenCPN (INGRESS MODE with nginx + KasmVNC)"
 log "[DEBUG] Loading configuration from ${CONFIG_PATH}"
 
 # ---------- Read configuration ----------
-RAW_INSECURE="$(jq_get '.insecure_mode' 'false')"
-INSECURE_MODE="${INSECURE_MODE:-$RAW_INSECURE}"
-
-VNC_PASSWORD_OPT="$(jq_get '.vnc_password' '')"
-VNC_PASSWORD="${VNC_PASSWORD:-$VNC_PASSWORD_OPT}"
+VNC_PASSWORD="${VNC_PASSWORD:-$(jq_get '.vnc_password' '')}"
+INSECURE_MODE_RAW="${INSECURE_MODE:-$(jq_get '.insecure_mode' 'false')}"
+INSECURE_MODE="$(echo "$INSECURE_MODE_RAW" | tr '[:upper:]' '[:upper:]')"  # TRUE/FALSE
 
 # ---------- Sanity checks ----------
 command -v vncserver     >/dev/null 2>&1 || { log "[ERROR] 'vncserver' (KasmVNC) not found"; exit 1; }
 command -v kasmvncpasswd >/dev/null 2>&1 || { log "[ERROR] 'kasmvncpasswd' not found"; exit 1; }
 command -v jq            >/dev/null 2>&1 || log "[WARN] 'jq' not found; options.json parsing may be limited."
-command -v curl          >/dev/null 2>&1 || log "[WARN] 'curl' not found; HTTP health checks will be limited."
-command -v nginx         >/dev/null 2>&1 || { log "[ERROR] 'nginx' not found"; exit 1; }
+command -v curl          >/dev/null 2>&1 || log "[WARN] 'curl' not found; HTTP health checks will be skipped."
+command -v nginx         >/dev/null 2>&1 || { log "[ERROR] 'nginx' not found in image"; exit 1; }
 
 # ---------- Password handling ----------
 if [[ -z "${VNC_PASSWORD:-}" ]]; then
-  if [[ "${INSECURE_MODE,,}" == "true" ]]; then
+  if [[ "$INSECURE_MODE" == "TRUE" ]]; then
     VNC_PASSWORD="opencpn"
     log "[WARN] insecure_mode=true and no vnc_password set; using default 'opencpn'"
   else
@@ -62,26 +58,27 @@ log "[DEBUG] display='${DISPLAY}', resolution='${VNC_RESOLUTION}'"
 log "[DEBUG] insecure_mode='${INSECURE_MODE}', vnc_password='${MASKED}'"
 log "[DEBUG] internal_port='${INTERNAL_PORT}', nginx_port='${NGINX_PORT}'"
 
-# Precompute HTTP Basic Authorization header for root:VNC_PASSWORD
-# base64 portability
-if base64 --help 2>&1 | grep -q -- '--wrap'; then
-  BASIC_AUTH_VALUE="$(printf 'root:%s' "$VNC_PASSWORD" | base64 --wrap=0)"
-else
-  BASIC_AUTH_VALUE="$(printf 'root:%s' "$VNC_PASSWORD" | base64 | tr -d '\n')"
-fi
-
 # ---------- DBus ----------
 log "[INFO] Ensuring DBus is running..."
 mkdir -p /var/run/dbus
 pgrep -x dbus-daemon >/dev/null 2>&1 || dbus-daemon --system --fork
 
-# ---------- KasmVNC auth (VNC + HTTP Basic for user root) ----------
+# ---------- KasmVNC auth (root, HTTP Basic) ----------
 log "[INFO] Setting KasmVNC password for user 'root'..."
 mkdir -p /root
 printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | kasmvncpasswd -u root -w /root/.kasmpasswd
 chmod 600 /root/.kasmpasswd || true
 
-# ---------- XFCE autostart: OpenCPN ----------
+# Base64 for "root:<password>" – used by nginx when talking to KasmVNC
+if command -v base64 >/dev/null 2>&1; then
+  KASMVNC_B64_AUTH="$(printf 'root:%s' "$VNC_PASSWORD" | base64 -w0 2>/dev/null || printf 'root:%s' "$VNC_PASSWORD" | base64)"
+else
+  log "[ERROR] 'base64' not found, cannot build Authorization header"
+  exit 1
+fi
+log "[DEBUG] KasmVNC Basic auth header (base64) prepared"
+
+# ---------- XFCE + OpenCPN autostart ----------
 log "[INFO] Configuring XFCE autostart for OpenCPN..."
 mkdir -p /root/.config/autostart
 cat >/root/.config/autostart/opencpn.desktop <<'EOF'
@@ -92,19 +89,15 @@ Exec=opencpn
 X-GNOME-Autostart-enabled=true
 EOF
 
-# ---------- KasmVNC xstartup (XFCE session) ----------
+# ---------- KasmVNC xstartup (full XFCE) ----------
 log "[INFO] Writing KasmVNC xstartup (XFCE session)..."
 mkdir -p /root/.vnc
-
 cat >/root/.vnc/xstartup <<'EOF'
 #!/bin/sh
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
-
-# Start XFCE and let autostart launch OpenCPN
 exec startxfce4
 EOF
-
 chmod +x /root/.vnc/xstartup
 
 # ---------- KasmVNC YAML config ----------
@@ -149,13 +142,6 @@ pointer:
 runtime_configuration:
   allow_client_to_override_kasm_server_settings: true
   allow_override_standard_vnc_server_settings: true
-  allow_override_list:
-    - pointer.enabled
-    - data_loss_prevention.clipboard.server_to_client.enabled
-    - data_loss_prevention.clipboard.client_to_server.enabled
-    - data_loss_prevention.clipboard.server_to_client.primary_clipboard_enabled
-    - data_loss_prevention.clipboard.client_to_server.size
-    - data_loss_prevention.clipboard.server_to_client.size
 
 logging:
   log_writer_name: all
@@ -163,17 +149,7 @@ logging:
   level: 30
 
 data_loss_prevention:
-  visible_region:
-    concealed_region:
-      allow_click_down: false
-      allow_click_release: false
   clipboard:
-    delay_between_operations: none
-    allow_mimetypes:
-      - text/plain
-      - text/html
-      - image/png
-      - chromium/x-web-custom-data
     server_to_client:
       enabled: true
       size: unlimited
@@ -181,39 +157,9 @@ data_loss_prevention:
     client_to_server:
       enabled: true
       size: unlimited
-  keyboard:
-    enabled: true
-    rate_limit: unlimited
-  logging:
-    level: off
 
 encoding:
   max_frame_rate: 60
-  full_frame_updates: none
-  rect_encoding_mode:
-    min_quality: 7
-    max_quality: 8
-    consider_lossless_quality: 10
-    rectangle_compress_threads: auto
-
-  video_encoding_mode:
-    jpeg_quality: -1
-    webp_quality: -1
-    max_resolution:
-      width: 1920
-      height: 1080
-    enter_video_encoding_mode:
-      time_threshold: 5
-      area_threshold: 45%
-    exit_video_encoding_mode:
-      time_threshold: 3
-    logging:
-      level: off
-    scaling_algorithm: progressive_bilinear
-
-  compare_framebuffer: auto
-  zrle_zlib_level: auto
-  hextile_improved_compression: true
 
 server:
   http:
@@ -240,7 +186,6 @@ chmod 600 /etc/kasmvnc/kasmvnc.yaml || true
 # ---------- Start KasmVNC ----------
 log "[INFO] Starting KasmVNC (vncserver) on display '${DISPLAY}' (HTTP :${INTERNAL_PORT}, HTTP BasicAuth ENABLED)..."
 
-# Best-effort cleanup
 if command -v timeout >/dev/null 2>&1; then
   timeout 3 vncserver -kill "${DISPLAY}" >/dev/null 2>&1 || true
 else
@@ -248,29 +193,23 @@ else
 fi
 
 vncserver "${DISPLAY}" \
-  -select-de xfce \
   -geometry "${VNC_RESOLUTION}" \
   >/var/log/kasmvncserver.log 2>&1 &
 
-# Wait for KasmVNC to listen on INTERNAL_PORT
+# Wait for KasmVNC HTTP to come up
 if command -v curl >/dev/null 2>&1; then
-  for i in {1..60}; do
-    if curl -fsS "http://127.0.0.1:${INTERNAL_PORT}/vnc.html" >/dev/null 2>&1; then
+  for i in {1..30}; do
+    if curl -sI "http://127.0.0.1:${INTERNAL_PORT}/" >/dev/null 2>&1; then
       log "[INFO] KasmVNC is listening on http://127.0.0.1:${INTERNAL_PORT}/"
       break
     fi
     sleep 1
   done
-else
-  log "[WARN] curl not available; skipping KasmVNC readiness check."
 fi
 
-# ---------- nginx config (ingress on 8099) ----------
+# ---------- nginx config (auth injected) ----------
 log "[INFO] Writing nginx config..."
-
-# Build Basic Auth header: "root:password" in base64
-BASIC_CREDS="root:${VNC_PASSWORD}"
-BASIC_B64="$(printf '%s' "$BASIC_CREDS" | base64 -w0 || printf '%s' "$BASIC_CREDS" | base64)"
+mkdir -p /var/log/nginx
 
 cat >/etc/nginx/nginx.conf <<EOF
 worker_processes  1;
@@ -280,59 +219,56 @@ events {
 }
 
 http {
-  # Logs
-  access_log /var/log/nginx/access.log;
-  error_log  /var/log/nginx/error.log debug;
+  include       mime.types;
+  default_type  application/octet-stream;
 
-  # WebSocket helper
-  map \$http_upgrade \$connection_upgrade {
-    default upgrade;
-    ''      close;
-  }
+  log_format main '\$remote_addr - \$remote_user [\$time_local] '
+                  '"\$request" \$status \$body_bytes_sent '
+                  'upstream_status=\$upstream_status '
+                  'ref="\$http_referer" ua="\$http_user_agent" '
+                  'upgrade="\$http_upgrade" connection="\$http_connection" '
+                  'rt=\$request_time urt=\$upstream_response_time';
 
-  upstream kasmvnc_backend {
-    server 127.0.0.1:${INTERNAL_PORT};
-  }
+  access_log  /var/log/nginx/access.log  main;
+  error_log   /var/log/nginx/error.log   debug;
 
   server {
-    listen ${EXTERNAL_PORT};
+    listen ${NGINX_PORT};
+    server_name _;
 
-    # Single location: handles HTML + WebSocket
+    # health / root (HA ingress calls this)
+    location = / {
+      return 302 /vnc.html;
+    }
+
+    # everything else proxied to KasmVNC with HTTP Basic injected
     location / {
-      proxy_pass http://kasmvnc_backend;
       proxy_http_version 1.1;
-
-      proxy_set_header Host \$host;
-      proxy_set_header X-Real-IP \$remote_addr;
-      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-      proxy_set_header X-Forwarded-Proto \$scheme;
-
-      # WebSocket upgrade
       proxy_set_header Upgrade \$http_upgrade;
-      proxy_set_header Connection \$connection_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host \$host;
 
-      # Inject Basic auth for KasmVNC
-      proxy_set_header Authorization "Basic ${BASIC_B64}";
+      # Inject HTTP Basic so KasmVNC is always happy
+      proxy_set_header Authorization "Basic ${KASMVNC_B64_AUTH}";
 
-      # Helpful for long-lived VNC sessions
-      proxy_read_timeout 86400;
-      proxy_send_timeout 86400;
+      proxy_buffering off;
+      proxy_request_buffering off;
+
+      proxy_pass http://127.0.0.1:${INTERNAL_PORT};
     }
   }
 }
 EOF
 
 # ---------- Start nginx ----------
-log "[INFO] Starting nginx proxy on :${EXTERNAL_PORT}..."
-nginx -g 'daemon off;' &
-sleep 1
+log "[INFO] Starting nginx proxy on :${NGINX_PORT}..."
+nginx
 
-
-# Wait for nginx (and transitively KasmVNC) to be ready
+# Wait for nginx to listen
 if command -v curl >/dev/null 2>&1; then
   for i in {1..30}; do
-    if curl -fsS "http://127.0.0.1:${EXTERNAL_PORT}/vnc.html" >/dev/null 2>&1; then
-      log "[INFO] nginx is serving /vnc.html on http://127.0.0.1:${EXTERNAL_PORT}/"
+    if curl -sI "http://127.0.0.1:${NGINX_PORT}/" >/dev/null 2>&1; then
+      log "[INFO] nginx is listening at http://127.0.0.1:${NGINX_PORT}/"
       break
     fi
     sleep 1
@@ -340,12 +276,11 @@ if command -v curl >/dev/null 2>&1; then
 fi
 
 log "[INFO] Ready. Use Home Assistant ingress; no direct ports exposed."
+log "[INFO] Tailing logs: /var/log/kasmvncserver.log /root/.vnc/*.log /var/log/nginx/access.log /var/log/nginx/error.log"
 
-# ---------- Keep container alive ----------
 shopt -s nullglob
 LOGS=(/var/log/kasmvncserver.log /root/.vnc/*.log /var/log/nginx/access.log /var/log/nginx/error.log)
 if (( ${#LOGS[@]} > 0 )); then
-  log "[INFO] Tailing logs: ${LOGS[*]}"
   tail -F "${LOGS[@]}"
 else
   log "[WARN] No log files found to tail; sleeping forever."
