@@ -15,8 +15,8 @@ init: false
 
 # Ingress-only, no direct ports
 ingress: true
-# ingress_port: 8099          # nginx port inside the container
-# NO ingress_entry here – nginx will handle `/` and `/vnc.html`
+ingress_port: 8099 # or 6080, but pick one and match EXTERNAL_PORT
+ingress_entry: / # now that nginx handles root, / is fine
 
 panel_icon: mdi:ship-wheel
 panel_title: OpenCPN

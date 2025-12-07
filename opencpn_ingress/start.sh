@@ -267,73 +267,72 @@ fi
 
 # ---------- nginx config (ingress on 8099) ----------
 log "[INFO] Writing nginx config..."
-mkdir -p /etc/nginx /var/log/nginx
+
+# Build Basic Auth header: "root:password" in base64
+BASIC_CREDS="root:${VNC_PASSWORD}"
+BASIC_B64="$(printf '%s' "$BASIC_CREDS" | base64 -w0 || printf '%s' "$BASIC_CREDS" | base64)"
 
 cat >/etc/nginx/nginx.conf <<EOF
 worker_processes  1;
-error_log  /var/log/nginx/error.log debug;
-pid        /var/run/nginx.pid;
 
 events {
-    worker_connections  1024;
+  worker_connections  1024;
 }
 
 http {
-    include       mime.types;
-    default_type  application/octet-stream;
+  # Logs
+  access_log /var/log/nginx/access.log;
+  error_log  /var/log/nginx/error.log debug;
 
-    log_format main '\$remote_addr - \$remote_user [\$time_local] '
-                    '"\$request" \$status \$body_bytes_sent upstream_status=\$upstream_status '
-                    'ref="\$http_referer" ua="\$http_user_agent" '
-                    'upgrade="\$http_upgrade" connection="\$http_connection" '
-                    'rt=\$request_time urt=\$upstream_response_time';
+  # WebSocket helper
+  map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    ''      close;
+  }
 
-    access_log  /var/log/nginx/access.log  main;
+  upstream kasmvnc_backend {
+    server 127.0.0.1:${INTERNAL_PORT};
+  }
 
-    sendfile        on;
-    keepalive_timeout  65;
+  server {
+    listen ${EXTERNAL_PORT};
 
-    # For WebSocket upgrade handling
-    map \$http_upgrade \$connection_upgrade {
-        default upgrade;
-        ''      close;
+    # Single location: handles HTML + WebSocket
+    location / {
+      proxy_pass http://kasmvnc_backend;
+      proxy_http_version 1.1;
+
+      proxy_set_header Host \$host;
+      proxy_set_header X-Real-IP \$remote_addr;
+      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto \$scheme;
+
+      # WebSocket upgrade
+      proxy_set_header Upgrade \$http_upgrade;
+      proxy_set_header Connection \$connection_upgrade;
+
+      # Inject Basic auth for KasmVNC
+      proxy_set_header Authorization "Basic ${BASIC_B64}";
+
+      # Helpful for long-lived VNC sessions
+      proxy_read_timeout 86400;
+      proxy_send_timeout 86400;
     }
-
-    upstream kasmvnc_upstream {
-        server 127.0.0.1:${INTERNAL_PORT};
-    }
-
-    server {
-        listen ${NGINX_PORT};
-        server_name _;
-
-        # Common proxy headers
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-
-        # Everything goes to KasmVNC, with injected BasicAuth
-        location / {
-            proxy_pass http://kasmvnc_upstream;
-            proxy_set_header Authorization "Basic ${BASIC_AUTH_VALUE}";
-            proxy_set_header Upgrade \$http_upgrade;
-            proxy_set_header Connection \$connection_upgrade;
-        }
-    }
+  }
 }
 EOF
 
 # ---------- Start nginx ----------
-log "[INFO] Starting nginx proxy on :${NGINX_PORT}..."
-nginx -c /etc/nginx/nginx.conf
+log "[INFO] Starting nginx proxy on :${EXTERNAL_PORT}..."
+nginx -g 'daemon off;' &
+sleep 1
 
-# Verify nginx
+
+# Wait for nginx (and transitively KasmVNC) to be ready
 if command -v curl >/dev/null 2>&1; then
   for i in {1..30}; do
-    if curl -fsS "http://127.0.0.1:${NGINX_PORT}/" >/dev/null 2>&1; then
-      log "[INFO] nginx is listening at http://127.0.0.1:${NGINX_PORT}/"
+    if curl -fsS "http://127.0.0.1:${EXTERNAL_PORT}/vnc.html" >/dev/null 2>&1; then
+      log "[INFO] nginx is serving /vnc.html on http://127.0.0.1:${EXTERNAL_PORT}/"
       break
     fi
     sleep 1
