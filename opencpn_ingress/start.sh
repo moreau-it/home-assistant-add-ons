@@ -209,15 +209,55 @@ fi
 
 
 # ---------- nginx config ----------
-log "[INFO] Rendering nginx config..."
+log "[INFO] Writing nginx config..."
 mkdir -p /var/log/nginx
 
-sed \
-  -e "s|__NGINX_PORT__|${NGINX_PORT}|g" \
-  -e "s|__INTERNAL_PORT__|${INTERNAL_PORT}|g" \
-  -e "s|__KASMVNC_AUTH__|${KASMVNC_B64_AUTH}|g" \
-  /etc/nginx/nginx.conf.template \
-  > /etc/nginx/nginx.conf
+cat >/etc/nginx/nginx.conf <<EOF
+worker_processes  1;
+
+events { worker_connections 1024; }
+
+http {
+  include       mime.types;
+  default_type  application/octet-stream;
+
+  log_format main '\$remote_addr - \$remote_user [\$time_local] '
+                  '"\$request" \$status \$body_bytes_sent '
+                  'upstream_status=\$upstream_status '
+                  'ref="\$http_referer" ua="\$http_user_agent" '
+                  'upgrade="\$http_upgrade" connection="\$http_connection" '
+                  'rt=\$request_time urt=\$upstream_response_time';
+
+  access_log  /var/log/nginx/access.log  main;
+  error_log   /var/log/nginx/error.log   debug;
+
+  server {
+    listen ${NGINX_PORT};
+    server_name _;
+
+    # IMPORTANT for ingress: never redirect to an absolute external URL
+    # (your logs showed Location: http://test.runnacraft.net:8099/vnc.html)
+    location = / {
+      return 302 /vnc.html;
+    }
+
+    location / {
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade \$http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host \$host;
+
+      # Inject HTTP Basic so KasmVNC is always happy
+      proxy_set_header Authorization "Basic ${KASMVNC_B64_AUTH}";
+
+      proxy_buffering off;
+      proxy_request_buffering off;
+
+      proxy_pass http://127.0.0.1:${INTERNAL_PORT};
+    }
+  }
+}
+EOF
 
 # Validate config early (fail fast)
 nginx -t
